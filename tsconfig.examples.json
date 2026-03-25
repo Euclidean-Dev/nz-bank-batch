@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "nz-bank-batch": ["./src/index.ts"],
+      "nz-bank-batch/*": ["./src/*.ts"]
+    }
+  },
+  "include": ["examples/**/*.ts"]
+}

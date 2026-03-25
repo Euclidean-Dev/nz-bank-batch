@@ -1,0 +1,3 @@
+A000001030123ACME PAYROLL LTD                    MARCH2026           230326                                                                                                         
+D00000212320000123456000050DC000000000001250Jane Smith          SALARY      MARCH26     PAY001      010123004567890000ACME PAYROLL LTD                                              
+D00000338900001234567000250DC000000000008801John Taylor         SALARY      MARCH26     PAY002      010123004567890000ACME PAYROLL LTD                                              

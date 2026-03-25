@@ -1,0 +1,123 @@
+{
+  "name": "nz-bank-batch",
+  "version": "1.0.0",
+  "description": "TypeScript library for generating New Zealand bank batch-payment upload files.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./nz": {
+      "import": {
+        "types": "./dist/nz.d.ts",
+        "default": "./dist/nz.js"
+      },
+      "require": {
+        "types": "./dist/nz.d.cts",
+        "default": "./dist/nz.cjs"
+      }
+    },
+    "./anz": {
+      "import": {
+        "types": "./dist/anz.d.ts",
+        "default": "./dist/anz.js"
+      },
+      "require": {
+        "types": "./dist/anz.d.cts",
+        "default": "./dist/anz.cjs"
+      }
+    },
+    "./asb": {
+      "import": {
+        "types": "./dist/asb.d.ts",
+        "default": "./dist/asb.js"
+      },
+      "require": {
+        "types": "./dist/asb.d.cts",
+        "default": "./dist/asb.cjs"
+      }
+    },
+    "./bnz": {
+      "import": {
+        "types": "./dist/bnz.d.ts",
+        "default": "./dist/bnz.js"
+      },
+      "require": {
+        "types": "./dist/bnz.d.cts",
+        "default": "./dist/bnz.cjs"
+      }
+    },
+    "./kiwibank": {
+      "import": {
+        "types": "./dist/kiwibank.d.ts",
+        "default": "./dist/kiwibank.js"
+      },
+      "require": {
+        "types": "./dist/kiwibank.d.cts",
+        "default": "./dist/kiwibank.cjs"
+      }
+    },
+    "./westpac": {
+      "import": {
+        "types": "./dist/westpac.d.ts",
+        "default": "./dist/westpac.js"
+      },
+      "require": {
+        "types": "./dist/westpac.d.cts",
+        "default": "./dist/westpac.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsdown",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:examples": "npm run build && tsc --noEmit -p tsconfig.examples.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fixtures:ib4b": "npm run build && node ./scripts/regenerate-ib4b-fixtures.mjs",
+    "fixtures:westpac": "npm run build && node ./scripts/regenerate-westpac-fixtures.mjs",
+    "type-tests": "npm run build && tsd",
+    "publint": "npm run build && publint",
+    "attw": "npm run build && attw --pack . --profile node16",
+    "pack:check": "npm run build && node ./scripts/check-pack.mjs"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@eslint/js": "^9.23.0",
+    "@types/node": "^22.13.14",
+    "@vitest/coverage-v8": "^3.1.1",
+    "eslint": "^9.23.0",
+    "eslint-config-prettier": "^10.1.1",
+    "prettier": "^3.5.3",
+    "publint": "^0.3.12",
+    "tsd": "^0.31.2",
+    "tsdown": "^0.21.4",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.28.0",
+    "vitest": "^3.1.1"
+  }
+}
