@@ -4,6 +4,7 @@ export type NzAccountNumber = Brand<string, 'NzAccountNumber'>;
 export type Cents = Brand<bigint, 'Cents'>;
 export type YyMmDd = Brand<string, 'YyMmDd'>;
 export type YyyyMmDd = Brand<string, 'YyyyMmDd'>;
+export type DateInput = string | Date;
 
 export type NzAccountParts = {
   readonly bankId: string;

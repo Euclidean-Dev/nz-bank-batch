@@ -1,6 +1,6 @@
 {
   "name": "nz-bank-batch",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "TypeScript library for generating New Zealand bank batch-payment upload files.",
   "keywords": [
     "new-zealand",
@@ -59,6 +59,16 @@
       "require": {
         "types": "./dist/nz.d.cts",
         "default": "./dist/nz.cjs"
+      }
+    },
+    "./portable": {
+      "import": {
+        "types": "./dist/portable.d.ts",
+        "default": "./dist/portable.js"
+      },
+      "require": {
+        "types": "./dist/portable.d.cts",
+        "default": "./dist/portable.cjs"
       }
     },
     "./anz": {

@@ -1,10 +1,11 @@
-import { AdapterError, DateError, FieldError } from '../../shared/errors.js';
+import { AdapterError, FieldError } from '../../shared/errors.js';
 import type { FixedWidthFieldInput } from '../../shared/fixed-width.js';
 import { renderFixedWidthRecord } from '../../shared/fixed-width.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
 import { ensureRenderedRecord, renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
 import { err, ok } from '../../shared/result.js';
 import { assertNzAccount, decomposeNzAccount, parseNzAccount } from '../../nz/account.js';
+import { assertDdMmYy } from '../../nz/date.js';
 import { computeBranchBaseHashTotal } from '../../nz/hash-total.js';
 import { parseCents, toCents } from '../../nz/money.js';
 import type { NzAccountNumber } from '../../nz/types.js';
@@ -16,8 +17,6 @@ import type {
 } from './types.js';
 
 const ASCII_PRINTABLE = /^[ -~]*$/;
-const DDMMYY_PATTERN = /^(\d{2})(\d{2})(\d{2})$/;
-const DDMMYYYY_PATTERN = /^(\d{2})(\d{2})(\d{4})$/;
 const MAX_PAYMENT_CENTS = 999_999_999n;
 const HEADER_FIELD_WIDTHS = [1, 6, 2, 4, 30, 6, 20, 6, 105] as const;
 const DETAIL_FIELD_WIDTHS = [1, 6, 2, 4, 8, 4, 2, 2, 15, 20, 12, 12, 12, 2, 4, 8, 4, 20, 42] as const;
@@ -34,66 +33,12 @@ type StoredTransaction = {
   readonly payeeParticulars: string;
 };
 
-function isValidDate(year: number, month: number, day: number): boolean {
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
 function currentDdMmYy(): string {
-  const now = new Date();
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const year = String(now.getUTCFullYear() % 100).padStart(2, '0');
-  return `${day}${month}${year}`;
+  return assertDdMmYy(new Date());
 }
 
 function normaliseUppercase(value: string): string {
   return value.toUpperCase();
-}
-
-function assertDdMmYy(input: string): string {
-  const trimmed = input.trim();
-  const shortMatch = DDMMYY_PATTERN.exec(trimmed);
-
-  if (shortMatch) {
-    const [, dayRaw, monthRaw, yearRaw] = shortMatch;
-    const day = Number(dayRaw);
-    const month = Number(monthRaw);
-    const year = 2000 + Number(yearRaw);
-
-    if (!isValidDate(year, month, day)) {
-      throw new DateError('INVALID_DATE', 'Westpac scheduledDate must be a valid calendar day.', {
-        input
-      });
-    }
-
-    return trimmed;
-  }
-
-  const longMatch = DDMMYYYY_PATTERN.exec(trimmed);
-
-  if (!longMatch) {
-    throw new DateError('INVALID_DATE', 'Westpac scheduledDate must be in DDMMYY format.', {
-      input
-    });
-  }
-
-  const [, dayRaw, monthRaw, yearRaw] = longMatch;
-  const day = Number(dayRaw);
-  const month = Number(monthRaw);
-  const year = Number(yearRaw);
-
-  if (!isValidDate(year, month, day)) {
-    throw new DateError('INVALID_DATE', 'Westpac scheduledDate must be a valid calendar day.', {
-      input
-    });
-  }
-
-  return `${dayRaw!}${monthRaw!}${yearRaw!.slice(2)}`;
 }
 
 function ensureAscii(name: string, value: string): string {
@@ -444,7 +389,7 @@ function createWestpacFile(
           )
         };
       } catch (error) {
-        return err(error as AdapterError | DateError | FieldError);
+        return err(error as AdapterError | FieldError);
       }
 
       try {
@@ -468,7 +413,7 @@ function createWestpacFile(
           }
         }
       } catch (error) {
-        return err(error as AdapterError | DateError | FieldError);
+        return err(error as AdapterError | FieldError);
       }
 
       transactions.push(stored);

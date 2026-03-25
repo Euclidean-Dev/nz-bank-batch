@@ -7,7 +7,7 @@ import { assertNzAccount, decomposeNzAccount, parseNzAccount } from '../../nz/ac
 import { assertYyMmDd, assertYyyyMmDd } from '../../nz/date.js';
 import { parseCents, toCents } from '../../nz/money.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
-import type { NzAccountNumber } from '../../nz/types.js';
+import type { DateInput, NzAccountNumber } from '../../nz/types.js';
 import type {
   AsbCreditTransactionCode,
   AsbDirectCreditFileConfig,
@@ -74,9 +74,20 @@ function createAsbField(
   };
 }
 
-function assertAsbDueDate(input: string | AsbDueDate): AsbDueDate {
-  const trimmed = String(input).trim();
-  return trimmed.length === 6 ? assertYyMmDd(trimmed) : assertYyyyMmDd(trimmed);
+function assertAsbDueDate(input: DateInput | AsbDueDate): AsbDueDate {
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+
+    if (/^\d{6}$/.test(trimmed)) {
+      return assertYyMmDd(trimmed);
+    }
+
+    if (/^\d{8}$/.test(trimmed)) {
+      return assertYyyyMmDd(trimmed);
+    }
+  }
+
+  return assertYyyyMmDd(input);
 }
 
 function computeMt9ImportCheckTotal(accounts: readonly NzAccountNumber[]): bigint {

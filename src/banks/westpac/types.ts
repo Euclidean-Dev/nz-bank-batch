@@ -2,7 +2,7 @@ import type { BatchFile, BatchFileSummary } from '../../shared/batch-file.js';
 import type { AdapterError, DateError, FieldError, MoneyError, NzAccountError } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, NzAccountNumber } from '../../nz/types.js';
+import type { Cents, DateInput, NzAccountNumber } from '../../nz/types.js';
 
 export type WestpacPaymentFormat = 'payment-csv' | 'payment-fixed-length';
 
@@ -11,7 +11,7 @@ export type WestpacPaymentFileConfig = {
   readonly customerCode?: string;
   readonly customerName?: string;
   readonly fileReference?: string;
-  readonly scheduledDate?: string;
+  readonly scheduledDate?: DateInput;
 };
 
 export type WestpacPaymentTransaction = {

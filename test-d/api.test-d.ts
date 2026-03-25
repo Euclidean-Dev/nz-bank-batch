@@ -1,8 +1,20 @@
-import { expectType } from 'tsd';
+import { expectAssignable, expectType } from 'tsd';
 import type { Buffer } from 'node:buffer';
 
 import type { Result } from '../dist/index.js';
 import { compareParsedFileFixtures, compareParsedFiles } from '../dist/index.js';
+import {
+  createPortableDebitFile,
+  createPortablePaymentFile,
+  type PortableDebitFile,
+  type PortableDebitFileError,
+  type PortableDebitTransaction,
+  type PortablePaymentFile,
+  type PortablePaymentBank,
+  type PortablePaymentCategory,
+  type PortablePaymentFileError,
+  type PortablePaymentTransaction
+} from '../dist/portable.js';
 import {
   createDirectCreditFile as createAsbCreditFile,
   createDirectDebitFile as createAsbDebitFile,
@@ -30,6 +42,7 @@ import {
   assertNzAccount,
   parseNzAccount,
   type Cents,
+  type DateInput,
   type NzAccountNumber
 } from '../dist/nz.js';
 
@@ -38,6 +51,47 @@ expectType<NzAccountNumber>(account);
 
 const cents = assertCents('12.50');
 expectType<Cents>(cents);
+
+const inputDate = new Date() as DateInput;
+expectType<DateInput>(inputDate);
+
+const portableFile = createPortablePaymentFile({
+  bank: 'westpac',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL LTD',
+  paymentDate: new Date(Date.UTC(2026, 2, 23))
+});
+expectType<PortablePaymentFile>(portableFile);
+expectAssignable<PortablePaymentCategory>('salary-and-wages');
+expectAssignable<PortablePaymentBank>('westpac');
+expectType<Result<void, PortablePaymentFileError>>(
+  portableFile.addTransaction({
+    toAccount: '12-3200-0123456-00',
+    amount: '12.50',
+    category: 'salary-and-wages',
+    payee: {
+      name: 'Jane Smith',
+      particulars: 'SALARY'
+    }
+  } as PortablePaymentTransaction)
+);
+
+const portableDebitFile = createPortableDebitFile({
+  bank: 'kiwibank',
+  sourceAccount: '38-9000-7654321-00',
+  collectorName: 'KIWI CAFE',
+  collectionDate: new Date(Date.UTC(2026, 2, 23))
+});
+expectType<PortableDebitFile>(portableDebitFile);
+expectType<Result<void, PortableDebitFileError>>(
+  portableDebitFile.addTransaction({
+    fromAccount: '01-0123-0456789-00',
+    amount: '45.00',
+    payer: {
+      name: 'Gym Member'
+    }
+  } as PortableDebitTransaction)
+);
 
 const parsed = parseNzAccount('01-0123-0456789-00');
 if (parsed.ok) {
@@ -48,7 +102,7 @@ const bnzFile = createBnzFile({
   type: 'direct-credit',
   fromAccount: '02-0001-0000001-00',
   originatorName: 'BNZ EXPORTS',
-  processDate: '20260323'
+  processDate: new Date(Date.UTC(2026, 2, 23))
 });
 expectType<'DC' | 'DD'>(bnzFile.transactionCode);
 expectType<Buffer>(bnzFile.toBuffer());
@@ -69,13 +123,13 @@ if (parsedBnzFile.ok) {
 
 createAsbCreditFile({
   fromAccount: '01-0123-0456789-00',
-  dueDate: '20260323',
+  dueDate: '23-03-2026',
   clientShortName: 'ACME PAYROLL'
 }).toBuffer();
 
 createAsbCreditFile({
   fromAccount: '01-0123-0456789-00',
-  dueDate: '20260323',
+  dueDate: new Date(Date.UTC(2026, 2, 23)),
   clientShortName: 'ACME PAYROLL'
 }).addTransaction({
   toAccount: '12-3200-0123456-00',
@@ -89,7 +143,7 @@ createAsbCreditFile({
 
 createAsbDebitFile({
   registrationId: '123456789012345',
-  dueDate: '20260323',
+  dueDate: '2026-03-23',
   clientShortName: 'ACME RECEIPTS',
   contra: {
     account: '01-0123-0456789-00',
@@ -125,7 +179,7 @@ if (parsedAsbDebitFile.ok) {
 }
 
 createAnzDomesticExtendedFile({
-  batchDueDate: '20260323'
+  batchDueDate: '23-03-2026'
 }).addTransaction({
   toAccount: '12-3200-0123456-00',
   amount: 100n,
@@ -143,13 +197,13 @@ if (parsedAnzFile.ok) {
 createDirectCreditFile({
   fromAccount: '38-9000-7654321-00',
   originatorName: 'KIWI CAFE',
-  processDate: '260323'
+  processDate: '2026-03-23'
 });
 
 createDirectDebitFile({
   fromAccount: '38-9000-7654321-00',
   originatorName: 'KIWI CAFE',
-  processDate: '260323'
+  processDate: new Date(Date.UTC(2026, 2, 23))
 });
 
 const parsedKiwibankFile = parseKiwibankFile(
@@ -165,7 +219,7 @@ const westpacCsvFile = createPaymentCsvFile({
   fromAccount: '01-0123-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   fileReference: 'MARCH2026',
-  scheduledDate: '230326'
+  scheduledDate: '23-03-2026'
 });
 
 expectType<Buffer>(westpacCsvFile.toBuffer());

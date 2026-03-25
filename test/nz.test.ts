@@ -12,6 +12,7 @@ import {
   getNzBank,
   isValidNzBankBranch,
   parseCents,
+  parseDdMmYy,
   parseNzAccount,
   parseYyMmDd,
   parseYyyyMmDd,
@@ -40,6 +41,11 @@ describe('NZ primitives', () => {
   it('validates YYMMDD and YYYYMMDD dates', () => {
     expect(parseYyMmDd('260323').ok).toBe(true);
     expect(parseYyyyMmDd('20260323').ok).toBe(true);
+    expect(parseYyMmDd('2026-03-23').ok).toBe(true);
+    expect(parseYyMmDd('23-03-2026').ok).toBe(true);
+    expect(parseDdMmYy('230326').ok).toBe(true);
+    expect(parseYyyyMmDd(new Date(Date.UTC(2026, 2, 23))).ok).toBe(true);
+    expect(parseYyyyMmDd('23/03/26').ok).toBe(false);
     expect(parseYyMmDd('260230').ok).toBe(false);
   });
 

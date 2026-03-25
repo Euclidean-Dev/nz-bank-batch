@@ -3,7 +3,7 @@ import type { BatchFileSummary } from '../../shared/batch-file.js';
 import type { AdapterError, DateError, FieldError, MoneyError, NzAccountError } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, NzAccountNumber, YyMmDd, YyyyMmDd } from '../../nz/types.js';
+import type { Cents, DateInput, NzAccountNumber, YyMmDd } from '../../nz/types.js';
 
 export type BnzFileType = 'direct-credit' | 'direct-debit';
 export type BnzTransactionCode = 'DC' | 'DD';
@@ -12,7 +12,7 @@ export type BnzFileConfig = {
   readonly fromAccount: string;
   readonly originatorName: string;
   readonly userReference?: string;
-  readonly processDate?: string | YyMmDd | YyyyMmDd;
+  readonly processDate?: DateInput | YyMmDd;
 };
 
 export type BnzTransaction = {
@@ -25,7 +25,7 @@ export type BnzTransaction = {
   readonly information?: string;
 };
 
-export type BnzFileError = AdapterError | FieldError | MoneyError | NzAccountError;
+export type BnzFileError = AdapterError | DateError | FieldError | MoneyError | NzAccountError;
 
 export type ParsedBnzTransaction = {
   readonly counterpartyAccount: NzAccountNumber;

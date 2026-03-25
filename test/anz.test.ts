@@ -11,8 +11,8 @@ function readFixture(name: string): string {
 describe('ANZ adapter', () => {
   it('renders an ANZ domestic extended file matching the golden fixture', () => {
     const file = createDomesticExtendedFile({
-      batchDueDate: '20260323',
-      batchCreationDate: '20260323'
+      batchDueDate: '2026-03-23',
+      batchCreationDate: new Date(Date.UTC(2026, 2, 23))
     });
 
     expect(
@@ -55,8 +55,8 @@ describe('ANZ adapter', () => {
 
   it('supports configurable line endings', () => {
     const file = createDomesticExtendedFile({
-      batchDueDate: '20260323',
-      batchCreationDate: '20260323'
+      batchDueDate: '23-03-2026',
+      batchCreationDate: '2026/03/23'
     });
 
     expect(
@@ -72,7 +72,7 @@ describe('ANZ adapter', () => {
 
   it('renders a UTF-8 buffer', () => {
     const file = createDomesticExtendedFile({
-      batchDueDate: '20260323',
+      batchDueDate: new Date(Date.UTC(2026, 2, 23)),
       batchCreationDate: '20260323'
     });
 

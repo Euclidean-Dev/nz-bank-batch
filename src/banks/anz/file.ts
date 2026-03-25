@@ -5,7 +5,7 @@ import { assertYyyyMmDd } from '../../nz/date.js';
 import { parseCents, toCents } from '../../nz/money.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
 import { isValidNzBankBranch } from '../../nz/banks.js';
-import type { YyyyMmDd } from '../../nz/types.js';
+import type { DateInput, YyyyMmDd } from '../../nz/types.js';
 import type {
   AnzDomesticExtendedFile,
   AnzDomesticExtendedFileConfig,
@@ -43,11 +43,7 @@ type ParsedAnzDomesticExtendedAccount = {
 };
 
 function currentYyyyMmDd(): YyyyMmDd {
-  const now = new Date();
-  const year = String(now.getUTCFullYear());
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  return assertYyyyMmDd(`${year}${month}${day}`);
+  return assertYyyyMmDd(new Date());
 }
 
 function failAccount(message: string, input: string): NzAccountError {
@@ -219,10 +215,10 @@ function renderControlRecord(summary: BatchFileSummary): string {
 export function createDomesticExtendedFile(
   config: AnzDomesticExtendedFileConfig
 ): AnzDomesticExtendedFile {
-  const batchDueDate = assertYyyyMmDd(String(config.batchDueDate));
+  const batchDueDate = assertYyyyMmDd(config.batchDueDate as DateInput);
   const batchCreationDate =
     config.batchCreationDate !== undefined
-      ? assertYyyyMmDd(String(config.batchCreationDate))
+      ? assertYyyyMmDd(config.batchCreationDate as DateInput)
       : currentYyyyMmDd();
 
   renderHeaderRecord({ batchDueDate, batchCreationDate });

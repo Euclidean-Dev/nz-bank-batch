@@ -14,7 +14,7 @@ describe('BNZ adapter', () => {
       fromAccount: '02-0001-0000001-00',
       originatorName: 'BNZ EXPORTS',
       userReference: 'MAY2026',
-      processDate: '20260323'
+      processDate: '2026-03-23'
     });
 
     expect(
@@ -53,7 +53,7 @@ describe('BNZ adapter', () => {
     const file = createDirectDebitFile({
       fromAccount: '02-0001-0000001-00',
       originatorName: 'BNZ EXPORTS',
-      processDate: '20260323'
+      processDate: new Date(Date.UTC(2026, 2, 23))
     });
 
     expect(

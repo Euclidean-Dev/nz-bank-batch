@@ -3,7 +3,7 @@ import type { BatchFileSummary } from '../../shared/batch-file.js';
 import type { AdapterError, DateError, FieldError, MoneyError, NzAccountError } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, NzAccountNumber, YyMmDd, YyyyMmDd } from '../../nz/types.js';
+import type { Cents, DateInput, NzAccountNumber, YyMmDd } from '../../nz/types.js';
 
 export type KiwibankFileType = 'direct-credit' | 'direct-debit';
 export type KiwibankTransactionCode = 'DC' | 'DD';
@@ -12,7 +12,7 @@ export type KiwibankFileConfig = {
   readonly fromAccount: string;
   readonly originatorName: string;
   readonly batchReference?: string;
-  readonly processDate?: string | YyMmDd | YyyyMmDd;
+  readonly processDate?: DateInput | YyMmDd;
 };
 
 export type KiwibankTransaction = {
@@ -25,7 +25,7 @@ export type KiwibankTransaction = {
   readonly information?: string;
 };
 
-export type KiwibankFileError = AdapterError | FieldError | MoneyError | NzAccountError;
+export type KiwibankFileError = AdapterError | DateError | FieldError | MoneyError | NzAccountError;
 
 export type ParsedKiwibankTransaction = {
   readonly counterpartyAccount: NzAccountNumber;

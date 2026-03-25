@@ -2,11 +2,11 @@ import { AdapterError, FieldError } from '../../shared/errors.js';
 import { renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
 import { err, ok, type Result } from '../../shared/result.js';
 import { assertNzAccount, parseNzAccount } from '../../nz/account.js';
-import { assertYyMmDd, assertYyyyMmDd } from '../../nz/date.js';
+import { assertYyMmDd } from '../../nz/date.js';
 import { computeBranchBaseHashTotal } from '../../nz/hash-total.js';
 import { parseCents, toCents } from '../../nz/money.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
-import type { NzAccountNumber, YyMmDd } from '../../nz/types.js';
+import type { DateInput, NzAccountNumber, YyMmDd } from '../../nz/types.js';
 import type {
   BnzFile,
   BnzFileConfig,
@@ -110,25 +110,15 @@ function renderIb4bRecord(fields: readonly Ib4bFieldInput[]): Result<string, Fie
 }
 
 function currentYyMmDd(): YyMmDd {
-  const now = new Date();
-  const year = String(now.getUTCFullYear()).slice(-2);
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  return assertYyMmDd(`${year}${month}${day}`);
+  return assertYyMmDd(new Date());
 }
 
-function normaliseProcessDate(input?: string): YyMmDd {
+function normaliseProcessDate(input?: DateInput): YyMmDd {
   if (input === undefined) {
     return currentYyMmDd();
   }
 
-  const raw = input.trim();
-
-  if (/^\d{6}$/.test(raw)) {
-    return assertYyMmDd(raw);
-  }
-
-  return assertYyMmDd(assertYyyyMmDd(raw).slice(2));
+  return assertYyMmDd(input);
 }
 
 function makeHeaderRecord(config: {

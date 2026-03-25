@@ -2,15 +2,15 @@ import type { BatchFile, BatchFileSummary } from '../../shared/batch-file.js';
 import type { AdapterError, DateError, FieldError, MoneyError, NzAccountError } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, YyyyMmDd } from '../../nz/types.js';
+import type { Cents, DateInput, YyyyMmDd } from '../../nz/types.js';
 
 export type AnzFileType = 'domestic-extended';
 
 export type AnzDomesticExtendedTransactionCode = '50' | '52' | '00';
 
 export type AnzDomesticExtendedFileConfig = {
-  readonly batchDueDate: string | YyyyMmDd;
-  readonly batchCreationDate?: string | YyyyMmDd;
+  readonly batchDueDate: DateInput | YyyyMmDd;
+  readonly batchCreationDate?: DateInput | YyyyMmDd;
 };
 
 export type AnzDomesticExtendedTransaction = {

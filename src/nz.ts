@@ -12,8 +12,10 @@ export {
   validateNzBankBranch
 } from './nz/banks.js';
 export {
+  assertDdMmYy,
   assertYyMmDd,
   assertYyyyMmDd,
+  parseDdMmYy,
   parseYyMmDd,
   parseYyyyMmDd
 } from './nz/date.js';
@@ -26,6 +28,7 @@ export {
 export type {
   BranchValidationHook,
   Cents,
+  DateInput,
   NzBankBranchRange,
   NzBankDefinition,
   NzAccountNumber,

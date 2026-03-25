@@ -9,7 +9,7 @@ import type {
 } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, NzAccountNumber, YyMmDd, YyyyMmDd } from '../../nz/types.js';
+import type { Cents, DateInput, NzAccountNumber, YyMmDd, YyyyMmDd } from '../../nz/types.js';
 
 export type AsbFileType = 'direct-credit' | 'direct-debit';
 export type AsbCreditTransactionCode = '051' | '052';
@@ -33,7 +33,7 @@ export type AsbOtherPartyDetails = {
 
 export type AsbDirectCreditFileConfig = {
   readonly fromAccount: string;
-  readonly dueDate: string | AsbDueDate;
+  readonly dueDate: DateInput | AsbDueDate;
   readonly clientShortName?: string;
 };
 
@@ -47,7 +47,7 @@ export type AsbDirectDebitContraConfig = {
 
 export type AsbDirectDebitFileConfig = {
   readonly registrationId: string;
-  readonly dueDate: string | AsbDueDate;
+  readonly dueDate: DateInput | AsbDueDate;
   readonly clientShortName?: string;
   readonly contra?: AsbDirectDebitContraConfig;
 };
@@ -77,7 +77,7 @@ export type AsbDirectDebitTransaction = {
 
 export type AsbTransaction = AsbDirectCreditTransaction | AsbDirectDebitTransaction;
 
-export type AsbFileError = AdapterError | FieldError | MoneyError | NzAccountError;
+export type AsbFileError = AdapterError | DateError | FieldError | MoneyError | NzAccountError;
 
 export type ParsedAsbPartyDetails = {
   readonly name: string;

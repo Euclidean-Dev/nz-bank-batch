@@ -17,7 +17,7 @@ describe('ASB adapter', () => {
   it('renders an MT9 direct credit file matching the golden fixture', () => {
     const file = createDirectCreditFile({
       fromAccount: '01-0123-0456789-00',
-      dueDate: '20260323',
+      dueDate: '23-03-2026',
       clientShortName: 'ACME PAYROLL'
     });
 
@@ -67,7 +67,7 @@ describe('ASB adapter', () => {
   it('renders an MT9 direct debit file matching the golden fixture', () => {
     const file = createDirectDebitFile({
       registrationId: '123456789012345',
-      dueDate: '20260323',
+      dueDate: new Date(Date.UTC(2026, 2, 23)),
       clientShortName: 'ACME RECEIPTS',
       contra: {
         account: '01-0123-0456789-00',

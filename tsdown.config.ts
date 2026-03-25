@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: './src/index.ts',
     nz: './src/nz.ts',
+    portable: './src/portable.ts',
     anz: './src/anz.ts',
     asb: './src/asb.ts',
     bnz: './src/bnz.ts',

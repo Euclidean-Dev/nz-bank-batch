@@ -39,6 +39,240 @@ npm install nz-bank-batch
 
 The examples below are intentionally plain. If the generated output needs to match what the bank expects byte-for-byte, boring is good.
 
+Date inputs are now normalised at the adapter boundary. In practice that means you can pass common NZ-style values such as `2026-03-23`, `23-03-2026`, `20260323`, or a `Date`, and the adapter will render the bank-specific output format it needs internally.
+
+For the most portable cross-bank code, prefer `Date`, `YYYY-MM-DD`, or `DD-MM-YYYY` inputs.
+
+Ambiguous two-digit separated inputs such as `26-03-23` are not auto-guessed across adapters. Use `YYMMDD`, `YYYY-MM-DD`, `DD-MM-YYYY`, or `Date` when you want the meaning to stay stable during a bank switch.
+
+### Portable outbound payments
+
+```ts
+import { createPortablePaymentFile } from 'nz-bank-batch/portable';
+
+const file = createPortablePaymentFile({
+  bank: 'asb',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL',
+  paymentDate: '2026-03-23'
+});
+
+file.addTransaction({
+  toAccount: '12-3200-0123456-00',
+  amount: '12.50',
+  category: 'salary-and-wages',
+  internalReference: 'PAYROLL01',
+  payee: {
+    name: 'Jane Smith',
+    code: 'MARCH',
+    reference: 'SALARY',
+    particulars: 'PAY'
+  },
+  payer: {
+    name: 'ACME PAYROLL',
+    code: 'PAYROLL',
+    reference: 'MAR26',
+    particulars: 'WAGES'
+  }
+});
+
+const output = file.toString();
+const buffer = file.toBuffer();
+```
+
+The portable entrypoint is a bank-neutral wrapper for the common outbound payment/direct-credit use case across ANZ, ASB direct credit, BNZ, Kiwibank, and Westpac payment files.
+
+It keeps business data in one semantic shape:
+
+- `sourceAccount`, `originatorName`, and `paymentDate` at file level
+- `payee` and optional `payer` parties at transaction level
+- optional `category: 'salary-and-wages'` when the payment should render with a bank-specific salary/wages credit code
+- optional `renderFormat` for Westpac because that bank exposes two payment file layouts
+
+This is intentionally additive. The bank-specific adapters remain available when you need bank-only capabilities such as direct debit, ASB registration IDs, or bank-native transaction fields.
+
+Portable payment bank switches can stay focused on file config. The transaction shape below can stay unchanged:
+
+```ts
+const portablePayment = {
+  toAccount: '12-3200-0123456-00',
+  amount: '12.50',
+  category: 'salary-and-wages' as const,
+  payee: {
+    name: 'Jane Smith',
+    particulars: 'PAY',
+    reference: 'SALARY',
+    code: 'MARCH'
+  },
+  payer: {
+    name: 'ACME PAYROLL',
+    particulars: 'WAGES',
+    reference: 'MAR26',
+    code: 'PAYROLL'
+  }
+};
+```
+
+ANZ:
+
+```ts
+const anzPortableFile = createPortablePaymentFile({
+  bank: 'anz',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL',
+  paymentDate: '2026-03-23',
+  batchCreationDate: '2026-03-23'
+});
+
+anzPortableFile.addTransaction(portablePayment);
+```
+
+ASB:
+
+```ts
+const asbPortableFile = createPortablePaymentFile({
+  bank: 'asb',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL',
+  paymentDate: '2026-03-23'
+});
+
+asbPortableFile.addTransaction({
+  ...portablePayment,
+  internalReference: 'PAYROLL01'
+});
+```
+
+BNZ:
+
+```ts
+const bnzPortableFile = createPortablePaymentFile({
+  bank: 'bnz',
+  sourceAccount: '02-0001-0000001-00',
+  originatorName: 'ACME PAYROLL',
+  paymentDate: '2026-03-23',
+  batchReference: 'MARCH2026'
+});
+
+bnzPortableFile.addTransaction(portablePayment);
+```
+
+Kiwibank:
+
+```ts
+const kiwibankPortableFile = createPortablePaymentFile({
+  bank: 'kiwibank',
+  sourceAccount: '38-9000-7654321-00',
+  originatorName: 'ACME PAYROLL',
+  paymentDate: '2026-03-23',
+  batchReference: 'MARCH2026'
+});
+
+kiwibankPortableFile.addTransaction(portablePayment);
+```
+
+Westpac:
+
+```ts
+const westpacPortableFile = createPortablePaymentFile({
+  bank: 'westpac',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL',
+  paymentDate: '2026-03-23',
+  batchReference: 'MARCH2026',
+  renderFormat: 'csv'
+});
+
+westpacPortableFile.addTransaction(portablePayment);
+```
+
+### Portable direct debit
+
+```ts
+import { createPortableDebitFile } from 'nz-bank-batch/portable';
+
+const portableDebit = {
+  fromAccount: '01-0123-0456789-00',
+  amount: '45.00',
+  payer: {
+    name: 'Gym Member',
+    particulars: 'MEMBERSHIP',
+    reference: 'DEBIT'
+  }
+};
+```
+
+ASB:
+
+```ts
+const asbPortableDebitFile = createPortableDebitFile({
+  bank: 'asb',
+  collectorName: 'ACME RECEIPTS',
+  collectionDate: '2026-03-23',
+  registrationId: '123456789012345',
+  contra: {
+    account: '01-0123-0456789-00',
+    code: 'GYM',
+    reference: 'MAR2026',
+    particulars: 'MONTHLY'
+  }
+});
+
+asbPortableDebitFile.addTransaction({
+  ...portableDebit,
+  payer: {
+    ...portableDebit.payer,
+    code: 'GYM',
+    reference: 'MAR2026',
+    particulars: 'MONTHLY'
+  }
+});
+```
+
+BNZ:
+
+```ts
+const bnzPortableDebitFile = createPortableDebitFile({
+  bank: 'bnz',
+  sourceAccount: '02-0001-0000001-00',
+  collectorName: 'BNZ EXPORTS',
+  collectionDate: '2026-03-23'
+});
+
+bnzPortableDebitFile.addTransaction({
+  fromAccount: '01-0902-0068389-00',
+  amount: '5.00',
+  payer: {
+    name: 'Debit Person'
+  }
+});
+```
+
+Kiwibank:
+
+```ts
+const kiwibankPortableDebitFile = createPortableDebitFile({
+  bank: 'kiwibank',
+  sourceAccount: '38-9000-7654321-00',
+  collectorName: 'KIWI CAFE',
+  collectionDate: '2026-03-23',
+  batchReference: 'MEMBERS'
+});
+
+kiwibankPortableDebitFile.addTransaction({
+  ...portableDebit,
+  collector: {
+    code: 'MAR'
+  }
+});
+```
+
+## Bank-Specific Adapters
+
+The portable examples above show the bank-neutral layer.
+
+The examples below switch back to the underlying bank-specific adapters. Use these when you need the bank-native file shape directly, or when you need capabilities that are not intentionally abstracted by the portable API.
+
 ### ANZ Domestic Extended
 
 ```ts
@@ -48,8 +282,8 @@ import { assertCents } from 'nz-bank-batch/nz';
 const amount = assertCents('12.50');
 
 const file = createDomesticExtendedFile({
-  batchDueDate: '20260323',
-  batchCreationDate: '20260323'
+  batchDueDate: '2026-03-23',
+  batchCreationDate: new Date(Date.UTC(2026, 2, 23))
 });
 
 file.addTransaction({
@@ -78,7 +312,7 @@ const file = createDirectCreditFile({
   fromAccount: '02-0001-0000001-00',
   originatorName: 'BNZ EXPORTS',
   userReference: 'MAY2026',
-  processDate: '20260323'
+  processDate: '2026-03-23'
 });
 
 file.addTransaction({
@@ -110,7 +344,7 @@ import { createDirectCreditFile } from 'nz-bank-batch/asb';
 
 const file = createDirectCreditFile({
   fromAccount: '01-0123-0456789-00',
-  dueDate: '20260323',
+  dueDate: '23-03-2026',
   clientShortName: 'ACME PAYROLL'
 });
 
@@ -144,7 +378,7 @@ import { createDirectDebitFile } from 'nz-bank-batch/asb';
 
 const file = createDirectDebitFile({
   registrationId: '123456789012345',
-  dueDate: '20260323',
+  dueDate: new Date(Date.UTC(2026, 2, 23)),
   clientShortName: 'ACME RECEIPTS',
   contra: {
     account: '01-0123-0456789-00',
@@ -180,7 +414,7 @@ const file = createDirectCreditFile({
   fromAccount: '38-9000-7654321-00',
   originatorName: 'KIWI CAFE',
   batchReference: 'WEEKLY',
-  processDate: '260323'
+  processDate: '23-03-2026'
 });
 
 file.addTransaction({
@@ -206,7 +440,7 @@ const file = createDirectDebitFile({
   fromAccount: '38-9000-7654321-00',
   originatorName: 'KIWI CAFE',
   batchReference: 'MEMBERS',
-  processDate: '260323'
+  processDate: new Date(Date.UTC(2026, 2, 23))
 });
 
 file.addTransaction({
@@ -232,7 +466,7 @@ const file = createPaymentCsvFile({
   fromAccount: '01-0123-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   fileReference: 'MARCH2026',
-  scheduledDate: '230326'
+  scheduledDate: '2026-03-23'
 });
 
 file.addTransaction({
@@ -257,7 +491,7 @@ const file = createPaymentFixedLengthFile({
   fromAccount: '01-0123-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   fileReference: 'MARCH2026',
-  scheduledDate: '230326'
+  scheduledDate: new Date(Date.UTC(2026, 2, 23))
 });
 
 file.addTransaction({
@@ -283,19 +517,42 @@ The root entry is intentionally small and does not import bank adapters.
 import { type Result, NzBatchError } from 'nz-bank-batch';
 ```
 
+### Portable payments
+
+```ts
+import {
+  createPortableDebitFile,
+  createPortablePaymentFile,
+  type PortableDebitCollector,
+  type PortableDebitContra,
+  type PortableDebitFile,
+  type PortableDebitFileConfig,
+  type PortableDebitPayer,
+  type PortableDebitTransaction,
+  type PortablePaymentBank,
+  type PortablePaymentCategory,
+  type PortablePaymentFile,
+  type PortablePaymentParty,
+  type PortablePaymentTransaction
+} from 'nz-bank-batch/portable';
+```
+
 ### NZ primitives
 
 ```ts
 import {
+  assertDdMmYy,
   assertCents,
   assertNzAccount,
   computeBranchBaseHashTotal,
+  parseDdMmYy,
   parseCents,
   parseNzAccount,
   parseYyMmDd,
   parseYyyyMmDd,
   validateNzAccountChecksum,
   type Cents,
+  type DateInput,
   type NzAccountNumber,
   type YyMmDd,
   type YyyyMmDd
@@ -308,6 +565,9 @@ Key functions:
 - `assertNzAccount(input, options?) -> NzAccountNumber`
 - `parseCents(input) -> Result<Cents, MoneyError>`
 - `assertCents(input) -> Cents`
+- `parseYyMmDd(input) -> Result<YyMmDd, DateError>`
+- `parseYyyyMmDd(input) -> Result<YyyyMmDd, DateError>`
+- `parseDdMmYy(input) -> Result<string, DateError>`
 - `computeBranchBaseHashTotal(accounts, options?) -> bigint`
 - `validateNzAccountChecksum(parts) -> Result<void, NzAccountError>`
 
@@ -450,6 +710,7 @@ What this library validates by default:
 
 - NZ account number structure and canonical normalisation
 - built-in NZ bank and branch range validation for all bundled banks
+- common NZ date inputs normalised into the bank-specific output format required by each adapter
 - adapter field ASCII safety
 - comma-free CSV fields
 - explicit max-length enforcement

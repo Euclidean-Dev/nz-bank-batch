@@ -19,7 +19,7 @@ describe('Westpac adapter', () => {
       fromAccount: '01-0123-0456789-00',
       customerName: 'ACME PAYROLL LTD',
       fileReference: 'MARCH2026',
-      scheduledDate: '230326'
+      scheduledDate: '2026-03-23'
     });
 
     expect(
@@ -59,7 +59,7 @@ describe('Westpac adapter', () => {
       fromAccount: '01-0123-0456789-00',
       customerName: 'ACME PAYROLL LTD',
       fileReference: 'MARCH2026',
-      scheduledDate: '230326'
+      scheduledDate: new Date(Date.UTC(2026, 2, 23))
     });
 
     expect(
@@ -92,7 +92,7 @@ describe('Westpac adapter', () => {
       fromAccount: '01-0123-0456789-00',
       customerName: 'ACME PAYROLL LTD',
       fileReference: 'MARCH2026',
-      scheduledDate: '230326'
+      scheduledDate: '23-03-2026'
     });
 
     expect(

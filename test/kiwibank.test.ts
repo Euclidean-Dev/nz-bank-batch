@@ -14,7 +14,7 @@ describe('Kiwibank adapter', () => {
       fromAccount: '38-9000-7654321-00',
       originatorName: 'KIWI CAFE',
       batchReference: 'WEEKLY',
-      processDate: '260323'
+      processDate: '23-03-2026'
     });
 
     expect(
@@ -54,7 +54,7 @@ describe('Kiwibank adapter', () => {
       fromAccount: '38-9000-7654321-00',
       originatorName: 'KIWI CAFE',
       batchReference: 'MEMBERS',
-      processDate: '260323'
+      processDate: new Date(Date.UTC(2026, 2, 23))
     });
 
     expect(
