@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "description": "TypeScript library for generating New Zealand bank batch-payment upload files.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Euclidean-Dev/nz-bank-batch.git"
+  },
+  "homepage": "https://github.com/Euclidean-Dev/nz-bank-batch#readme",
+  "bugs": {
+    "url": "https://github.com/Euclidean-Dev/nz-bank-batch/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
