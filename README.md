@@ -1,5 +1,8 @@
 # nz-bank-batch
 
+[![npm version](https://img.shields.io/npm/v/nz-bank-batch?logo=npm)](https://www.npmjs.com/package/nz-bank-batch)
+[![install](https://img.shields.io/badge/install-npm%20i%20nz--bank--batch-CB3837?logo=npm)](https://www.npmjs.com/package/nz-bank-batch)
+
 Premium TypeScript primitives and bank adapters for generating New Zealand batch-payment upload files, without leaving the awkward parts to application glue.
 
 ## Why this library?
@@ -460,7 +463,55 @@ What this library does not do by default:
 - assume remote bank metadata is authoritative at runtime
 - silently coerce non-ASCII or comma-containing text
 
-The bundled branch table now covers all NZ banks included in the integrated registry. If you need stricter or institution-specific branch rules, pass a `branchHook` into `parseNzAccount` or `assertNzAccount` and connect it to your own register data.
+The bundled branch table now covers all NZ banks included in the integrated registry. That is the default baseline. A `branchHook` lets you add your own branch rule after the account has been parsed into canonical parts.
+
+Use that hook in two common cases:
+
+- you want stricter business rules than the bundled table, such as only allowing branches your organisation has approved
+- you want to validate against your own branch register instead of the bundled one; in that case, disable built-in branch validation with `validateBankBranch: false`
+
+The hook receives `NzAccountParts` and can:
+
+- return `true` or `{ ok: true }` to accept the branch
+- return `false` to reject the branch with the default hook error
+- return `{ ok: false, message }` to reject it with your own message
+
+Example:
+
+```ts
+import {
+  assertNzAccount,
+  type BranchValidationHook
+} from 'nz-bank-batch/nz';
+
+const allowedBranches = new Set(['123350', '123351', '123399']);
+
+const branchHook: BranchValidationHook = (parts) => {
+  const branchKey = `${parts.bankId}${parts.branch}`;
+
+  if (!allowedBranches.has(branchKey)) {
+    return {
+      ok: false,
+      message: `Branch ${parts.bankId}-${parts.branch} is not enabled in the local branch register.`
+    };
+  }
+
+  return { ok: true };
+};
+
+const account = assertNzAccount('12-3350-0123456-00', {
+  branchHook
+});
+```
+
+If your own branch register is meant to replace the bundled one entirely, combine both options:
+
+```ts
+assertNzAccount('12-3350-0123456-00', {
+  validateBankBranch: false,
+  branchHook
+});
+```
 
 Checksum support is implemented as a separate routine so callers can opt into stricter validation without forcing remote branch metadata into every parse flow.
 
