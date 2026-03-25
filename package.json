@@ -1,7 +1,25 @@
 {
   "name": "nz-bank-batch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TypeScript library for generating New Zealand bank batch-payment upload files.",
+  "keywords": [
+    "new-zealand",
+    "nz",
+    "banking",
+    "bank-batch",
+    "batch-payments",
+    "payments",
+    "direct-credit",
+    "direct-debit",
+    "anz",
+    "asb",
+    "bnz",
+    "kiwibank",
+    "westpac",
+    "mt9",
+    "ib4b",
+    "deskbank"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
