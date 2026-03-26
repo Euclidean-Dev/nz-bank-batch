@@ -1083,13 +1083,9 @@ npm run pack:check
 
 Implemented in v1:
 
-- ANZ direct credit (Domestic Extended / MTS)
+- ANZ direct credit and direct debit (Domestic Extended / MTS)
 - ASB MT9 direct credit and direct debit
 - BNZ IB4B direct credit and direct debit
 - Kiwibank IB4B direct credit and direct debit
 - Westpac Deskbank CSV direct credit and direct debit
 - NZ account primitives, cents parsing, date validation, CSV rendering, and hash totals
-
-Not yet implemented:
-
-- ANZ simple domestic payment CSV
