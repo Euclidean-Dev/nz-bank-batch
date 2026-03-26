@@ -80,7 +80,7 @@ export function validateNzBankBranch(
     return err(
       new NzAccountError(
         'NZ_ACCOUNT_BRANCH',
-        `Account ${parts.canonicalDigits} has an unknown bank or invalid branch range.`,
+        `Account ${parts.canonicalDigits} failed validation: bank ${parts.bankId} does not allow branch ${parts.branch} in the bundled NZ bank table.`,
         {
           account: parts.canonicalDigits,
           bankId: parts.bankId,

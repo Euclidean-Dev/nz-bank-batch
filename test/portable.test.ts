@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { createPortableDebitFile, createPortablePaymentFile } from '../src/portable.js';
+import {
+  createPortableDebitFile,
+  createPortablePaymentFile,
+  explainValidationError,
+  validatePortablePaymentBatch,
+  validatePortablePaymentFileConfig,
+  validatePortablePaymentTransaction
+} from '../src/portable.js';
+import { parseNzAccount } from '../src/nz.js';
 
 function readFixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
@@ -187,7 +195,7 @@ describe('Portable payment API', () => {
       originatorName: 'ACME PAYROLL LTD',
       batchReference: 'MARCH2026',
       paymentDate: '2026-03-23',
-      renderFormat: 'csv'
+      westpacRenderFormat: 'csv'
     });
 
     const fixedFile = createPortablePaymentFile({
@@ -196,7 +204,7 @@ describe('Portable payment API', () => {
       originatorName: 'ACME PAYROLL LTD',
       batchReference: 'MARCH2026',
       paymentDate: '2026-03-23',
-      renderFormat: 'fixed-length'
+      westpacRenderFormat: 'fixed-length'
     });
 
     const transactions = [
@@ -313,5 +321,149 @@ describe('Portable direct debit API', () => {
     ).toBe(true);
 
     expect(file.toString()).toBe(readFixture('kiwibank-direct-debit.txt'));
+  });
+});
+
+describe('Portable payment validation helpers', () => {
+  it('returns actionable config diagnostics with structured context', () => {
+    const result = validatePortablePaymentFileConfig({
+      bank: 'westpac',
+      sourceAccount: '18-3902-1002003-00',
+      originatorName: 'ACME PAYROLL',
+      paymentDate: '2026-03-23',
+      westpacRenderFormat: 'csv'
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.warnings).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.code).toBe('NZ_ACCOUNT_BRANCH');
+    expect(result.errors[0]?.path).toBe('config.sourceAccount');
+    expect(result.errors[0]?.suggestion).toContain('parseNzAccount()');
+  });
+
+  it('returns bank-compatibility warnings for ignored or approximate portable fields', () => {
+    const result = validatePortablePaymentTransaction(
+      {
+        toAccount: '12-3200-0123456-00',
+        amount: '12.50',
+        category: 'salary-and-wages',
+        internalReference: 'PAYROLL01',
+        payee: {
+          name: 'Jane Smith',
+          code: 'MARCH',
+          reference: 'SALARY',
+          particulars: 'PAY'
+        },
+        payer: {
+          name: 'ACME PAYROLL',
+          analysis: 'PAYROLL',
+          reference: 'MAR26'
+        }
+      },
+      { bank: 'westpac' }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.category'
+        }),
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.internalReference'
+        }),
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.payee.reference'
+        }),
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_APPROXIMATED',
+          path: 'transaction.payee.code'
+        }),
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.payer.name'
+        }),
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.payer.analysis'
+        })
+      ])
+    );
+  });
+
+  it('aggregates config and transaction diagnostics across a batch', () => {
+    const result = validatePortablePaymentBatch({
+      config: {
+        bank: 'bnz',
+        sourceAccount: '18-3902-1002003-00',
+        originatorName: 'BNZ EXPORTS',
+        paymentDate: '2026-03-23'
+      },
+      transactions: [
+        {
+          toAccount: '18-3902-1002003-00',
+          amount: '12.50',
+          payee: {
+            name: 'Broken Account'
+          }
+        },
+        {
+          toAccount: '01-0902-0068389-00',
+          amount: '12.345',
+          payer: {
+            analysis: 'IGNORED'
+          },
+          payee: {
+            name: 'Broken Amount'
+          }
+        }
+      ]
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'NZ_ACCOUNT_BRANCH',
+          path: 'config.sourceAccount'
+        }),
+        expect.objectContaining({
+          code: 'NZ_ACCOUNT_BRANCH',
+          path: 'transactions[0].toAccount'
+        }),
+        expect.objectContaining({
+          code: 'INVALID_MONEY',
+          path: 'transactions[1].amount'
+        })
+      ])
+    );
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transactions[1].payer.analysis'
+        })
+      ])
+    );
+  });
+
+  it('explains existing validation errors with suggestions', () => {
+    const parsed = parseNzAccount('18-3902-1002003-00');
+
+    expect(parsed.ok).toBe(false);
+
+    if (parsed.ok) {
+      return;
+    }
+
+    const explanation = explainValidationError(parsed.error);
+
+    expect(explanation.code).toBe('NZ_ACCOUNT_BRANCH');
+    expect(explanation.suggestion).toContain('parseNzAccount');
   });
 });

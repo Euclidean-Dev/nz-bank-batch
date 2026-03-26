@@ -1,18 +1,28 @@
-import { expectAssignable, expectType } from 'tsd';
+import { expectAssignable, expectNotAssignable, expectType } from 'tsd';
 import type { Buffer } from 'node:buffer';
 
 import type { Result } from '../dist/index.js';
-import { compareParsedFileFixtures, compareParsedFiles } from '../dist/index.js';
+import {
+  compareParsedFileFixtures,
+  compareParsedFiles
+} from '../dist/index.js';
 import {
   createPortableDebitFile,
   createPortablePaymentFile,
+  explainValidationError,
+  validatePortablePaymentBatch,
+  validatePortablePaymentFileConfig,
+  validatePortablePaymentTransaction,
   type PortableDebitFile,
   type PortableDebitFileError,
   type PortableDebitTransaction,
   type PortablePaymentFile,
   type PortablePaymentBank,
   type PortablePaymentCategory,
+  type PortablePaymentFileConfig,
   type PortablePaymentFileError,
+  type PortablePaymentValidationIssue,
+  type PortablePaymentValidationResult,
   type PortablePaymentTransaction
 } from '../dist/portable.js';
 import {
@@ -22,7 +32,10 @@ import {
   parseDirectCreditFile as parseAsbDirectCreditFile
 } from '../dist/asb.js';
 import type { BnzFileError } from '../dist/bnz.js';
-import { createFile as createBnzFile, parseFile as parseBnzFile } from '../dist/bnz.js';
+import {
+  createFile as createBnzFile,
+  parseFile as parseBnzFile
+} from '../dist/bnz.js';
 import {
   createDomesticExtendedFile as createAnzDomesticExtendedFile,
   parseDomesticExtendedFile as parseAnzDomesticExtendedFile
@@ -76,6 +89,78 @@ expectType<Result<void, PortablePaymentFileError>>(
   } as PortablePaymentTransaction)
 );
 
+expectNotAssignable<PortablePaymentFileConfig>({
+  bank: 'anz',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL LTD',
+  westpacRenderFormat: 'csv'
+});
+
+expectAssignable<PortablePaymentFileConfig>({
+  bank: 'westpac',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL LTD',
+  westpacRenderFormat: 'fixed-length'
+});
+
+expectNotAssignable<PortablePaymentFileConfig>({
+  bank: 'bnz',
+  sourceAccount: '02-0001-0000001-00',
+  originatorName: 'BNZ EXPORTS',
+  batchCreationDate: '2026-03-23'
+});
+
+expectNotAssignable<PortablePaymentFileConfig>({
+  bank: 'anz',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL LTD',
+  batchReference: 'MARCH2026'
+});
+
+const configValidation = validatePortablePaymentFileConfig({
+  bank: 'westpac',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL LTD',
+  westpacRenderFormat: 'csv'
+});
+expectType<PortablePaymentValidationResult>(configValidation);
+
+const transactionValidation = validatePortablePaymentTransaction(
+  {
+    toAccount: '12-3200-0123456-00',
+    amount: '12.50',
+    payee: {
+      name: 'Jane Smith'
+    }
+  },
+  { bank: 'westpac' }
+);
+expectType<PortablePaymentValidationResult>(transactionValidation);
+expectAssignable<readonly PortablePaymentValidationIssue[]>(
+  transactionValidation.errors
+);
+expectAssignable<readonly PortablePaymentValidationIssue[]>(
+  transactionValidation.warnings
+);
+
+const batchValidation = validatePortablePaymentBatch({
+  config: {
+    bank: 'bnz',
+    sourceAccount: '02-0001-0000001-00',
+    originatorName: 'BNZ EXPORTS'
+  },
+  transactions: [
+    {
+      toAccount: '01-0902-0068389-00',
+      amount: '12.50',
+      payee: {
+        name: 'Supplier'
+      }
+    }
+  ]
+});
+expectType<PortablePaymentValidationResult>(batchValidation);
+
 const portableDebitFile = createPortableDebitFile({
   bank: 'kiwibank',
   sourceAccount: '38-9000-7654321-00',
@@ -98,6 +183,12 @@ if (parsed.ok) {
   expectType<NzAccountNumber>(parsed.value);
 }
 
+if (!parsed.ok) {
+  expectType<string | undefined>(
+    explainValidationError(parsed.error).suggestion
+  );
+}
+
 const bnzFile = createBnzFile({
   type: 'direct-credit',
   fromAccount: '02-0001-0000001-00',
@@ -114,7 +205,9 @@ expectType<Result<void, BnzFileError>>(
   })
 );
 
-const parsedBnzFile = parseBnzFile('1,,,,020001000000100,7,260323,260323,\r\n2,010902006838900,50,1250,Supplier,,,,,BNZ EXPORTS,,,\r\n3,1250,1,90200068389\r\n');
+const parsedBnzFile = parseBnzFile(
+  '1,,,,020001000000100,7,260323,260323,\r\n2,010902006838900,50,1250,Supplier,,,,,BNZ EXPORTS,,,\r\n3,1250,1,90200068389\r\n'
+);
 
 if (parsedBnzFile.ok) {
   expectType<'direct-credit' | 'direct-debit'>(parsedBnzFile.value.kind);
@@ -241,7 +334,9 @@ if (parsedWestpacFixedFile.ok) {
 }
 
 if (parsedAnzFile.ok && parsedWestpacCsvFile.ok) {
-  expectType<boolean>(compareParsedFiles(parsedAnzFile.value, parsedAnzFile.value).equal);
+  expectType<boolean>(
+    compareParsedFiles(parsedAnzFile.value, parsedAnzFile.value).equal
+  );
 }
 
 const parsedFixtureComparison = compareParsedFileFixtures(
