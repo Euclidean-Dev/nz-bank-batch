@@ -8,8 +8,21 @@ import type {
 } from './types.js';
 
 export const NZ_BANKS = [
-  { id: '01', branches: [{ from: 1, to: 999 }, { from: 1100, to: 1199 }, { from: 1800, to: 1899 }] },
-  { id: '02', branches: [{ from: 1, to: 999 }, { from: 1200, to: 1299 }] },
+  {
+    id: '01',
+    branches: [
+      { from: 1, to: 999 },
+      { from: 1100, to: 1199 },
+      { from: 1800, to: 1899 }
+    ]
+  },
+  {
+    id: '02',
+    branches: [
+      { from: 1, to: 999 },
+      { from: 1200, to: 1299 }
+    ]
+  },
   {
     id: '03',
     branches: [
@@ -21,12 +34,31 @@ export const NZ_BANKS = [
     ]
   },
   { id: '04', branches: [{ from: 2020, to: 2024 }] },
-  { id: '06', branches: [{ from: 1, to: 999 }, { from: 1400, to: 1499 }] },
+  {
+    id: '06',
+    branches: [
+      { from: 1, to: 999 },
+      { from: 1400, to: 1499 }
+    ]
+  },
   { id: '08', branches: [{ from: 6500, to: 6599 }] },
   { id: '09', branches: [{ from: 0, to: 0 }] },
   { id: '10', branches: [{ from: 5165, to: 5169 }] },
-  { id: '11', branches: [{ from: 5000, to: 6499 }, { from: 6600, to: 8999 }] },
-  { id: '12', branches: [{ from: 3000, to: 3299 }, { from: 3400, to: 3499 }, { from: 3600, to: 3699 }] },
+  {
+    id: '11',
+    branches: [
+      { from: 5000, to: 6499 },
+      { from: 6600, to: 8999 }
+    ]
+  },
+  {
+    id: '12',
+    branches: [
+      { from: 3000, to: 3299 },
+      { from: 3400, to: 3499 },
+      { from: 3600, to: 3699 }
+    ]
+  },
   { id: '13', branches: [{ from: 4900, to: 4999 }] },
   { id: '14', branches: [{ from: 4700, to: 4799 }] },
   { id: '15', branches: [{ from: 3900, to: 3999 }] },
@@ -52,7 +84,9 @@ export const NZ_BANKS = [
   { id: '88', branches: [{ from: 8800, to: 8805 }] }
 ] as const satisfies readonly NzBankDefinition[];
 
-const NZ_BANK_MAP = new Map<string, NzBankDefinition>(NZ_BANKS.map((bank) => [bank.id, bank]));
+const NZ_BANK_MAP = new Map<string, NzBankDefinition>(
+  NZ_BANKS.map((bank) => [bank.id, bank])
+);
 
 function inRange(branch: string, range: NzBankBranchRange): boolean {
   const branchNumber = Number(branch);

@@ -1,5 +1,8 @@
 import { ok, type Result } from '../../shared/result.js';
-import { parseIb4bFile, type ParsedIb4bFile } from '../../shared/ib4b-parser.js';
+import {
+  parseIb4bFile,
+  type ParsedIb4bFile
+} from '../../shared/ib4b-parser.js';
 import type { BnzParseError, ParsedBnzFile } from './types.js';
 
 function mapParsedFile(parsed: ParsedIb4bFile): ParsedBnzFile {
@@ -16,7 +19,9 @@ function mapParsedFile(parsed: ParsedIb4bFile): ParsedBnzFile {
   };
 }
 
-export function parseFile(input: string | Buffer): Result<ParsedBnzFile, BnzParseError> {
+export function parseFile(
+  input: string | Buffer
+): Result<ParsedBnzFile, BnzParseError> {
   const parsed = parseIb4bFile(input);
 
   if (!parsed.ok) {

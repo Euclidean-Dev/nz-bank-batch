@@ -1,9 +1,31 @@
-export { createDomesticExtendedFile, createFile } from './file.js';
-export { parseDomesticExtendedFile, parseFile } from './parse.js';
+export {
+  createDirectCreditFile,
+  createDirectDebitFile,
+  createDomesticExtendedFile,
+  createFile
+} from './file.js';
+export {
+  parseDirectCreditFile,
+  parseDirectDebitFile,
+  parseDomesticExtendedFile,
+  parseFile
+} from './parse.js';
 export type {
+  AnzDirectCreditFile,
+  AnzDirectCreditFileConfig,
+  AnzDirectCreditFileError,
+  AnzDirectCreditTransaction,
+  AnzDirectCreditTransactionCode,
+  AnzDirectDebitFile,
+  AnzDirectDebitFileConfig,
+  AnzDirectDebitFileError,
+  AnzDirectDebitFileType,
+  AnzDirectDebitTransaction,
+  AnzDirectDebitTransactionCode,
   AnzFile,
   AnzFileConfig,
   AnzDomesticExtendedFile,
+  AnzDomesticExtendedFileType,
   AnzDomesticExtendedFileConfig,
   AnzFileError,
   AnzFileType,
@@ -11,12 +33,20 @@ export type {
   AnzDomesticExtendedTransaction,
   AnzDomesticExtendedTransactionCode,
   ParseAnzDomesticExtendedFile,
+  ParseAnzDirectCreditFile,
+  ParseAnzDirectDebitFile,
+  ParsedAnzDirectDebitFile,
+  ParsedAnzDirectDebitTransaction,
   ParseAnzFile,
+  ParsedAnzDirectCreditFile,
+  ParsedAnzDirectCreditTransaction,
   ParsedAnzDomesticExtendedFile,
   ParsedAnzDomesticExtendedTransaction,
   ParsedAnzFile,
   ParsedAnzTransaction,
   AnzTransaction,
+  CreateAnzDirectCreditFile,
+  CreateAnzDirectDebitFile,
   CreateAnzDomesticExtendedFile,
   CreateAnzFile
 } from './types.js';

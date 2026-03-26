@@ -155,7 +155,10 @@ function compareValues(
   });
 }
 
-export function compareParsedFiles(expected: unknown, actual: unknown): ParsedFileComparison {
+export function compareParsedFiles(
+  expected: unknown,
+  actual: unknown
+): ParsedFileComparison {
   const differences: ParsedFileDifference[] = [];
 
   compareValues(expected, actual, '', differences);
@@ -170,7 +173,10 @@ export function compareParsedFileFixtures<TParsed, TError>(
   expectedInput: string | Buffer,
   actualInput: string | Buffer,
   parseFile: ParsedFileInputParser<TParsed, TError>
-): Result<ParsedFileFixtureComparison<TParsed>, ParsedFileFixtureParseError<TError>> {
+): Result<
+  ParsedFileFixtureComparison<TParsed>,
+  ParsedFileFixtureParseError<TError>
+> {
   const expectedParsed = parseFile(expectedInput);
 
   if (!expectedParsed.ok) {
@@ -196,7 +202,9 @@ export function compareParsedFileFixtures<TParsed, TError>(
   });
 }
 
-export function formatParsedFileComparison(comparison: ParsedFileComparison): string {
+export function formatParsedFileComparison(
+  comparison: ParsedFileComparison
+): string {
   if (comparison.equal) {
     return 'No differences.';
   }

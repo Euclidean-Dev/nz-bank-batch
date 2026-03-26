@@ -23,7 +23,9 @@ import type {
 } from './types.js';
 
 const HEADER_WIDTHS = [2, 15, 1, 13, 20, 109] as const;
-const DETAIL_WIDTHS = [2, 2, 4, 7, 3, 3, 10, 20, 12, 12, 12, 12, 1, 20, 12, 12, 12, 4] as const;
+const DETAIL_WIDTHS = [
+  2, 2, 4, 7, 3, 3, 10, 20, 12, 12, 12, 12, 1, 20, 12, 12, 12, 4
+] as const;
 const TRAILER_WIDTHS = [2, 2, 11, 6, 10, 129] as const;
 const DETAIL_RECORD_TYPE = '13';
 const TRAILER_KEY_FIELD = '99';
@@ -43,7 +45,11 @@ function splitLines(input: string | Buffer): string[] {
   return lines;
 }
 
-function sliceFields(line: string, widths: readonly number[], lineNumber: number) {
+function sliceFields(
+  line: string,
+  widths: readonly number[],
+  lineNumber: number
+) {
   const expectedWidth = widths.reduce((sum, width) => sum + width, 0);
 
   if (line.length !== expectedWidth) {
@@ -69,7 +75,11 @@ function trimField(value: string): string {
   return value.trimEnd();
 }
 
-function parsePositiveInteger(field: string, fieldName: string, lineNumber: number): Result<bigint, AdapterError> {
+function parsePositiveInteger(
+  field: string,
+  fieldName: string,
+  lineNumber: number
+): Result<bigint, AdapterError> {
   const trimmed = field.trim();
 
   if (!/^\d+$/.test(trimmed)) {
@@ -85,7 +95,8 @@ function parsePositiveInteger(field: string, fieldName: string, lineNumber: numb
 
 function parseAsbDueDate(value: string, lineNumber: number) {
   const trimmed = trimField(value);
-  const parsed = trimmed.length === 6 ? parseYyMmDd(trimmed) : parseYyyyMmDd(trimmed);
+  const parsed =
+    trimmed.length === 6 ? parseYyMmDd(trimmed) : parseYyyyMmDd(trimmed);
 
   if (!parsed.ok) {
     return err(
@@ -127,24 +138,33 @@ function parseAccountFields(
   return parsed;
 }
 
-function computeMt9ImportCheckTotal(accounts: readonly NzAccountNumber[]): bigint {
+function computeMt9ImportCheckTotal(
+  accounts: readonly NzAccountNumber[]
+): bigint {
   let total = 0n;
 
   for (const account of accounts) {
     const parts = decomposeNzAccount(account);
-    total = (total + BigInt(`${parts.branch}${parts.base}`)) % (10n ** 11n);
+    total = (total + BigInt(`${parts.branch}${parts.base}`)) % 10n ** 11n;
   }
 
   return total;
 }
 
-function buildDirectCreditSummary(transactions: readonly ParsedAsbDirectCreditTransaction[]): BatchFileSummary {
-  const total = transactions.reduce((sum, transaction) => sum + transaction.amount, 0n);
+function buildDirectCreditSummary(
+  transactions: readonly ParsedAsbDirectCreditTransaction[]
+): BatchFileSummary {
+  const total = transactions.reduce(
+    (sum, transaction) => sum + transaction.amount,
+    0n
+  );
 
   return {
     count: transactions.length,
     totalCents: toCents(total),
-    hashTotal: computeMt9ImportCheckTotal(transactions.map((transaction) => transaction.toAccount))
+    hashTotal: computeMt9ImportCheckTotal(
+      transactions.map((transaction) => transaction.toAccount)
+    )
   };
 }
 
@@ -152,10 +172,17 @@ function buildDirectDebitSummary(
   transactions: readonly ParsedAsbDirectDebitTransaction[],
   contra?: ParsedAsbDirectDebitContra
 ): BatchFileSummary {
-  const total = transactions.reduce((sum, transaction) => sum + transaction.amount, 0n);
-  const accounts = contra === undefined
-    ? transactions.map((transaction) => transaction.toAccount)
-    : [...transactions.map((transaction) => transaction.toAccount), contra.account];
+  const total = transactions.reduce(
+    (sum, transaction) => sum + transaction.amount,
+    0n
+  );
+  const accounts =
+    contra === undefined
+      ? transactions.map((transaction) => transaction.toAccount)
+      : [
+          ...transactions.map((transaction) => transaction.toAccount),
+          contra.account
+        ];
 
   return {
     count: transactions.length + (contra === undefined ? 0 : 1),
@@ -194,11 +221,15 @@ function parseOtherPartyDetails(
   };
 }
 
-function parseDirectCreditFileInternal(input: string | Buffer): Result<ParsedAsbDirectCreditFile, AsbParseError> {
+function parseDirectCreditFileInternal(
+  input: string | Buffer
+): Result<ParsedAsbDirectCreditFile, AsbParseError> {
   const lines = splitLines(input);
 
   if (lines.length < 2) {
-    return fail('ASB MT9 direct credit file must contain at least a header and trailer record.');
+    return fail(
+      'ASB MT9 direct credit file must contain at least a header and trailer record.'
+    );
   }
 
   const headerResult = sliceFields(lines[0]!, HEADER_WIDTHS, 1);
@@ -268,7 +299,11 @@ function parseDirectCreditFileInternal(input: string | Buffer): Result<ParsedAsb
       return toAccountResult;
     }
 
-    const amountResult = parsePositiveInteger(fields[6] ?? '', 'amount', lineNumber);
+    const amountResult = parsePositiveInteger(
+      fields[6] ?? '',
+      'amount',
+      lineNumber
+    );
 
     if (!amountResult.ok) {
       return amountResult;
@@ -294,7 +329,11 @@ function parseDirectCreditFileInternal(input: string | Buffer): Result<ParsedAsb
   }
 
   const trailerLineNumber = lines.length;
-  const trailerResult = sliceFields(lines.at(-1)!, TRAILER_WIDTHS, trailerLineNumber);
+  const trailerResult = sliceFields(
+    lines.at(-1)!,
+    TRAILER_WIDTHS,
+    trailerLineNumber
+  );
 
   if (!trailerResult.ok) {
     return trailerResult;
@@ -302,20 +341,31 @@ function parseDirectCreditFileInternal(input: string | Buffer): Result<ParsedAsb
 
   const trailer = trailerResult.value;
 
-  if ((trailer[0] ?? '') !== DETAIL_RECORD_TYPE || (trailer[1] ?? '') !== TRAILER_KEY_FIELD) {
+  if (
+    (trailer[0] ?? '') !== DETAIL_RECORD_TYPE ||
+    (trailer[1] ?? '') !== TRAILER_KEY_FIELD
+  ) {
     return fail('Invalid ASB MT9 direct credit trailer record.', {
       lineNumber: trailerLineNumber,
       record: lines.at(-1)
     });
   }
 
-  const hashResult = parsePositiveInteger(trailer[2] ?? '', 'hashTotal', trailerLineNumber);
+  const hashResult = parsePositiveInteger(
+    trailer[2] ?? '',
+    'hashTotal',
+    trailerLineNumber
+  );
 
   if (!hashResult.ok) {
     return hashResult;
   }
 
-  const totalResult = parsePositiveInteger(trailer[4] ?? '', 'totalCents', trailerLineNumber);
+  const totalResult = parsePositiveInteger(
+    trailer[4] ?? '',
+    'totalCents',
+    trailerLineNumber
+  );
 
   if (!totalResult.ok) {
     return totalResult;
@@ -324,19 +374,25 @@ function parseDirectCreditFileInternal(input: string | Buffer): Result<ParsedAsb
   const summary = buildDirectCreditSummary(transactions);
 
   if (hashResult.value !== summary.hashTotal) {
-    return fail('ASB MT9 direct credit trailer hash does not match computed hash total.', {
-      lineNumber: trailerLineNumber,
-      expected: summary.hashTotal.toString(),
-      actual: hashResult.value.toString()
-    });
+    return fail(
+      'ASB MT9 direct credit trailer hash does not match computed hash total.',
+      {
+        lineNumber: trailerLineNumber,
+        expected: summary.hashTotal.toString(),
+        actual: hashResult.value.toString()
+      }
+    );
   }
 
   if (totalResult.value !== (summary.totalCents as bigint)) {
-    return fail('ASB MT9 direct credit trailer total does not match computed total.', {
-      lineNumber: trailerLineNumber,
-      expected: (summary.totalCents as bigint).toString(),
-      actual: totalResult.value.toString()
-    });
+    return fail(
+      'ASB MT9 direct credit trailer total does not match computed total.',
+      {
+        lineNumber: trailerLineNumber,
+        expected: (summary.totalCents as bigint).toString(),
+        actual: totalResult.value.toString()
+      }
+    );
   }
 
   return ok({
@@ -349,11 +405,15 @@ function parseDirectCreditFileInternal(input: string | Buffer): Result<ParsedAsb
   });
 }
 
-function parseDirectDebitFileInternal(input: string | Buffer): Result<ParsedAsbDirectDebitFile, AsbParseError> {
+function parseDirectDebitFileInternal(
+  input: string | Buffer
+): Result<ParsedAsbDirectDebitFile, AsbParseError> {
   const lines = splitLines(input);
 
   if (lines.length < 2) {
-    return fail('ASB MT9 direct debit file must contain at least a header and trailer record.');
+    return fail(
+      'ASB MT9 direct debit file must contain at least a header and trailer record.'
+    );
   }
 
   const headerResult = sliceFields(lines[0]!, HEADER_WIDTHS, 1);
@@ -420,7 +480,11 @@ function parseDirectDebitFileInternal(input: string | Buffer): Result<ParsedAsbD
       return accountResult;
     }
 
-    const amountResult = parsePositiveInteger(fields[6] ?? '', 'amount', lineNumber);
+    const amountResult = parsePositiveInteger(
+      fields[6] ?? '',
+      'amount',
+      lineNumber
+    );
 
     if (!amountResult.ok) {
       return amountResult;
@@ -430,9 +494,12 @@ function parseDirectDebitFileInternal(input: string | Buffer): Result<ParsedAsbD
 
     if (transactionCode === '051') {
       if (contra !== undefined) {
-        return fail('ASB MT9 direct debit file contains multiple contra records.', {
-          lineNumber
-        });
+        return fail(
+          'ASB MT9 direct debit file contains multiple contra records.',
+          {
+            lineNumber
+          }
+        );
       }
 
       contra = {
@@ -472,7 +539,11 @@ function parseDirectDebitFileInternal(input: string | Buffer): Result<ParsedAsbD
   }
 
   const trailerLineNumber = lines.length;
-  const trailerResult = sliceFields(lines.at(-1)!, TRAILER_WIDTHS, trailerLineNumber);
+  const trailerResult = sliceFields(
+    lines.at(-1)!,
+    TRAILER_WIDTHS,
+    trailerLineNumber
+  );
 
   if (!trailerResult.ok) {
     return trailerResult;
@@ -480,20 +551,31 @@ function parseDirectDebitFileInternal(input: string | Buffer): Result<ParsedAsbD
 
   const trailer = trailerResult.value;
 
-  if ((trailer[0] ?? '') !== DETAIL_RECORD_TYPE || (trailer[1] ?? '') !== TRAILER_KEY_FIELD) {
+  if (
+    (trailer[0] ?? '') !== DETAIL_RECORD_TYPE ||
+    (trailer[1] ?? '') !== TRAILER_KEY_FIELD
+  ) {
     return fail('Invalid ASB MT9 direct debit trailer record.', {
       lineNumber: trailerLineNumber,
       record: lines.at(-1)
     });
   }
 
-  const hashResult = parsePositiveInteger(trailer[2] ?? '', 'hashTotal', trailerLineNumber);
+  const hashResult = parsePositiveInteger(
+    trailer[2] ?? '',
+    'hashTotal',
+    trailerLineNumber
+  );
 
   if (!hashResult.ok) {
     return hashResult;
   }
 
-  const totalResult = parsePositiveInteger(trailer[4] ?? '', 'totalCents', trailerLineNumber);
+  const totalResult = parsePositiveInteger(
+    trailer[4] ?? '',
+    'totalCents',
+    trailerLineNumber
+  );
 
   if (!totalResult.ok) {
     return totalResult;
@@ -502,29 +584,42 @@ function parseDirectDebitFileInternal(input: string | Buffer): Result<ParsedAsbD
   const summary = buildDirectDebitSummary(detailTransactions, contra);
 
   if (hashResult.value !== summary.hashTotal) {
-    return fail('ASB MT9 direct debit trailer hash does not match computed hash total.', {
-      lineNumber: trailerLineNumber,
-      expected: summary.hashTotal.toString(),
-      actual: hashResult.value.toString()
-    });
+    return fail(
+      'ASB MT9 direct debit trailer hash does not match computed hash total.',
+      {
+        lineNumber: trailerLineNumber,
+        expected: summary.hashTotal.toString(),
+        actual: hashResult.value.toString()
+      }
+    );
   }
 
   if (totalResult.value !== (summary.totalCents as bigint)) {
-    return fail('ASB MT9 direct debit trailer total does not match computed total.', {
-      lineNumber: trailerLineNumber,
-      expected: (summary.totalCents as bigint).toString(),
-      actual: totalResult.value.toString()
-    });
+    return fail(
+      'ASB MT9 direct debit trailer total does not match computed total.',
+      {
+        lineNumber: trailerLineNumber,
+        expected: (summary.totalCents as bigint).toString(),
+        actual: totalResult.value.toString()
+      }
+    );
   }
 
   if (
     contra !== undefined &&
-    contra.amount !== detailTransactions.reduce((sum, transaction) => sum + transaction.amount, 0n)
+    contra.amount !==
+      detailTransactions.reduce(
+        (sum, transaction) => sum + transaction.amount,
+        0n
+      )
   ) {
-    return fail('ASB MT9 contra amount does not match the sum of direct debit transactions.', {
-      lineNumber: trailerLineNumber,
-      contraAmount: contra.amount.toString()
-    });
+    return fail(
+      'ASB MT9 contra amount does not match the sum of direct debit transactions.',
+      {
+        lineNumber: trailerLineNumber,
+        contraAmount: contra.amount.toString()
+      }
+    );
   }
 
   return ok({

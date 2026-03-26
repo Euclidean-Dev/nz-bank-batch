@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { createDirectCreditFile, createDirectDebitFile } from '../src/kiwibank.js';
+import {
+  createDirectCreditFile,
+  createDirectDebitFile
+} from '../src/kiwibank.js';
 
 function readFixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');

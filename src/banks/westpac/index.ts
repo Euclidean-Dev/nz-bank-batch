@@ -1,18 +1,47 @@
-export { createPaymentCsvFile, createPaymentFixedLengthFile } from './file.js';
-export { parsePaymentCsvFile, parsePaymentFixedLengthFile } from './parse.js';
+export {
+  createDirectCreditFile,
+  createDirectDebitFile,
+  createPaymentCsvFile
+} from './file.js';
+export {
+  parseDirectCreditFile,
+  parseDirectDebitFile,
+  parseFile,
+  parsePaymentCsvFile
+} from './parse.js';
 export type {
+  CreateWestpacDirectCreditFile,
+  CreateWestpacDirectDebitFile,
   CreateWestpacPaymentFile,
+  ParseWestpacDirectCreditFile,
+  ParseWestpacDirectDebitFile,
+  ParseWestpacFile,
   ParseWestpacPaymentFile,
   ParseWestpacPaymentCsvFile,
-  ParseWestpacPaymentFixedLengthFile,
+  ParsedWestpacDirectCreditFile,
+  ParsedWestpacDirectCreditTransaction,
+  ParsedWestpacDirectDebitFile,
+  ParsedWestpacDirectDebitTransaction,
+  ParsedWestpacFile,
   ParsedWestpacPaymentCsvFile,
   ParsedWestpacPaymentFile,
-  ParsedWestpacPaymentFixedLengthFile,
   ParsedWestpacPaymentTransaction,
+  WestpacDirectCreditFile,
+  WestpacDirectCreditFileConfig,
+  WestpacDirectCreditFileError,
+  WestpacDirectCreditParseError,
+  WestpacDirectCreditTransaction,
+  WestpacDirectCreditTransactionCode,
+  WestpacDirectDebitFile,
+  WestpacDirectDebitFileConfig,
+  WestpacDirectDebitFileError,
+  WestpacDirectDebitParseError,
+  WestpacDirectDebitTransaction,
+  WestpacFileError,
+  WestpacParseError,
   WestpacPaymentFile,
   WestpacPaymentFileConfig,
   WestpacPaymentFileError,
-  WestpacPaymentFormat,
   WestpacPaymentParseError,
   WestpacPaymentTransaction
 } from './types.js';

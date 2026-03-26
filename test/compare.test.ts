@@ -5,7 +5,10 @@ import {
   compareParsedFiles,
   formatParsedFileComparison
 } from '../src/index.js';
-import { createDomesticExtendedFile, parseDomesticExtendedFile } from '../src/anz.js';
+import {
+  createDomesticExtendedFile,
+  parseDomesticExtendedFile
+} from '../src/anz.js';
 
 describe('Parsed file comparison', () => {
   it('reports field-level differences between parsed files', () => {
@@ -45,18 +48,25 @@ describe('Parsed file comparison', () => {
       throw new Error('Expected parsed ANZ fixtures to be valid.');
     }
 
-    const comparison = compareParsedFiles(expectedParsed.value, actualParsed.value);
+    const comparison = compareParsedFiles(
+      expectedParsed.value,
+      actualParsed.value
+    );
 
     expect(comparison.equal).toBe(false);
     expect(
-      comparison.differences.some((difference) => difference.path === 'transactions[0].amount')
+      comparison.differences.some(
+        (difference) => difference.path === 'transactions[0].amount'
+      )
     ).toBe(true);
     expect(
       comparison.differences.some(
         (difference) => difference.path === 'transactions[0].otherPartyName'
       )
     ).toBe(true);
-    expect(formatParsedFileComparison(comparison)).toContain('transactions[0].amount');
+    expect(formatParsedFileComparison(comparison)).toContain(
+      'transactions[0].amount'
+    );
   });
 
   it('compares raw fixtures by parsing them first', () => {
@@ -103,7 +113,8 @@ describe('Parsed file comparison', () => {
     expect(comparison.value.comparison.equal).toBe(false);
     expect(
       comparison.value.comparison.differences.some(
-        (difference) => difference.path === 'transactions[0].subscriberReference'
+        (difference) =>
+          difference.path === 'transactions[0].subscriberReference'
       )
     ).toBe(true);
   });

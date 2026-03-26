@@ -1,4 +1,8 @@
-export { createDirectCreditFile, createDirectDebitFile, createFile } from './file.js';
+export {
+  createDirectCreditFile,
+  createDirectDebitFile,
+  createFile
+} from './file.js';
 export { parseFile } from './parse.js';
 export type {
   KiwibankFile,

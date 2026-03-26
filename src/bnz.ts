@@ -1,4 +1,9 @@
-export { createDirectCreditFile, createDirectDebitFile, createFile, parseFile } from './banks/bnz/index.js';
+export {
+  createDirectCreditFile,
+  createDirectDebitFile,
+  createFile,
+  parseFile
+} from './banks/bnz/index.js';
 export type {
   BnzFile,
   BnzFileConfig,

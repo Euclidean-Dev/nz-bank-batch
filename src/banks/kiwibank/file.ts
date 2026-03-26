@@ -69,10 +69,14 @@ function prepareIb4bField(input: Ib4bFieldInput): Result<string, FieldError> {
 
   if (stringValue.includes(',')) {
     return err(
-      new FieldError('FIELD_COMMA', `Field ${spec.name} must not contain commas.`, {
-        field: spec.name,
-        value: stringValue
-      })
+      new FieldError(
+        'FIELD_COMMA',
+        `Field ${spec.name} must not contain commas.`,
+        {
+          field: spec.name,
+          value: stringValue
+        }
+      )
     );
   }
 
@@ -93,7 +97,9 @@ function prepareIb4bField(input: Ib4bFieldInput): Result<string, FieldError> {
   return ok(stringValue);
 }
 
-function renderIb4bRecord(fields: readonly Ib4bFieldInput[]): Result<string, FieldError> {
+function renderIb4bRecord(
+  fields: readonly Ib4bFieldInput[]
+): Result<string, FieldError> {
   const output: string[] = [];
 
   for (const field of fields) {
@@ -131,11 +137,26 @@ function makeHeaderRecord(config: {
     { value: '', spec: { name: 'blank1' } },
     { value: '', spec: { name: 'blank2' } },
     { value: '', spec: { name: 'blank3' } },
-    { value: config.fromAccount as string, spec: { name: 'fromAccount', required: true, maxLength: 16 } },
-    { value: HEADER_CONTROL_VALUE, spec: { name: 'control', required: true, maxLength: 1 } },
-    { value: config.processDate, spec: { name: 'processDate', required: true, maxLength: 6 } },
-    { value: config.processDate, spec: { name: 'effectiveDate', required: true, maxLength: 6 } },
-    { value: config.batchReference, spec: { name: 'batchReference', maxLength: 12, truncate: true } }
+    {
+      value: config.fromAccount as string,
+      spec: { name: 'fromAccount', required: true, maxLength: 16 }
+    },
+    {
+      value: HEADER_CONTROL_VALUE,
+      spec: { name: 'control', required: true, maxLength: 1 }
+    },
+    {
+      value: config.processDate,
+      spec: { name: 'processDate', required: true, maxLength: 6 }
+    },
+    {
+      value: config.processDate,
+      spec: { name: 'effectiveDate', required: true, maxLength: 6 }
+    },
+    {
+      value: config.batchReference,
+      spec: { name: 'batchReference', maxLength: 12, truncate: true }
+    }
   ]);
 }
 
@@ -146,27 +167,79 @@ function makeTransactionRecord(
 ) {
   return renderIb4bRecord([
     { value: '2', spec: { name: 'recordType', required: true } },
-    { value: transaction.counterpartyAccount as string, spec: { name: 'counterpartyAccount', required: true, maxLength: 16 } },
-    { value: transactionCode, spec: { name: 'transactionCode', required: true, maxLength: 2 } },
-    { value: transaction.amountCents, spec: { name: 'amountCents', required: true, maxLength: 14 } },
-    { value: transaction.accountName, spec: { name: 'accountName', required: true, maxLength: 20, truncate: true } },
-    { value: transaction.particulars, spec: { name: 'particulars', maxLength: 12, truncate: true } },
-    { value: transaction.reference, spec: { name: 'reference', maxLength: 12, truncate: true } },
+    {
+      value: transaction.counterpartyAccount as string,
+      spec: { name: 'counterpartyAccount', required: true, maxLength: 16 }
+    },
+    {
+      value: transactionCode,
+      spec: { name: 'transactionCode', required: true, maxLength: 2 }
+    },
+    {
+      value: transaction.amountCents,
+      spec: { name: 'amountCents', required: true, maxLength: 14 }
+    },
+    {
+      value: transaction.accountName,
+      spec: {
+        name: 'accountName',
+        required: true,
+        maxLength: 20,
+        truncate: true
+      }
+    },
+    {
+      value: transaction.particulars,
+      spec: { name: 'particulars', maxLength: 12, truncate: true }
+    },
+    {
+      value: transaction.reference,
+      spec: { name: 'reference', maxLength: 12, truncate: true }
+    },
     { value: '', spec: { name: 'blank' } },
-    { value: transaction.information, spec: { name: 'information', maxLength: 12, truncate: true } },
-    { value: originatorName, spec: { name: 'originatorName', required: true, maxLength: 20, truncate: true } },
-    { value: transaction.code, spec: { name: 'code', maxLength: 12, truncate: true } },
-    { value: transaction.reference, spec: { name: 'referenceRepeat', maxLength: 12, truncate: true } },
-    { value: transaction.particulars, spec: { name: 'particularsRepeat', maxLength: 12, truncate: true } }
+    {
+      value: transaction.information,
+      spec: { name: 'information', maxLength: 12, truncate: true }
+    },
+    {
+      value: originatorName,
+      spec: {
+        name: 'originatorName',
+        required: true,
+        maxLength: 20,
+        truncate: true
+      }
+    },
+    {
+      value: transaction.code,
+      spec: { name: 'code', maxLength: 12, truncate: true }
+    },
+    {
+      value: transaction.reference,
+      spec: { name: 'referenceRepeat', maxLength: 12, truncate: true }
+    },
+    {
+      value: transaction.particulars,
+      spec: { name: 'particularsRepeat', maxLength: 12, truncate: true }
+    }
   ]);
 }
 
 function makeTrailerRecord(summary: BatchFileSummary) {
   return renderIb4bRecord([
     { value: '3', spec: { name: 'recordType', required: true } },
-    { value: summary.totalCents, spec: { name: 'totalCents', required: true, maxLength: 14 } },
-    { value: summary.count, spec: { name: 'count', required: true, maxLength: 8 } },
-    { value: summary.hashTotal, spec: { name: 'hashTotal', required: true, maxLength: 15 } }
+    {
+      value: summary.totalCents,
+      spec: { name: 'totalCents', required: true, maxLength: 14 }
+    },
+    {
+      value: summary.count,
+      spec: { name: 'count', required: true, maxLength: 8 }
+    },
+    {
+      value: summary.hashTotal,
+      spec: { name: 'hashTotal', required: true, maxLength: 15 }
+    }
   ]);
 }
 
@@ -262,7 +335,11 @@ function createKiwibankFile(
           batchReference
         }),
         ...transactions.map((transaction) =>
-          makeTransactionRecord(renderedTransactionCode, config.originatorName, transaction)
+          makeTransactionRecord(
+            renderedTransactionCode,
+            config.originatorName,
+            transaction
+          )
         ),
         makeTrailerRecord(summary)
       ].map((result) => {
@@ -280,11 +357,15 @@ function createKiwibankFile(
   return file;
 }
 
-export function createDirectCreditFile(config: KiwibankFileConfig): KiwibankFile {
+export function createDirectCreditFile(
+  config: KiwibankFileConfig
+): KiwibankFile {
   return createKiwibankFile('direct-credit', config);
 }
 
-export function createDirectDebitFile(config: KiwibankFileConfig): KiwibankFile {
+export function createDirectDebitFile(
+  config: KiwibankFileConfig
+): KiwibankFile {
   return createKiwibankFile('direct-debit', config);
 }
 

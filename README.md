@@ -16,8 +16,11 @@ They are deceptively awkward:
 - each line must end with CRLF by default
 - totals and hash totals have to line up exactly
 - account numbers need normalisation long before they are rendered
+- teams often end up baking one bank's format into application code, so later changing banks can force avoidable software changes
 
 `nz-bank-batch` treats those constraints as a library problem, not something every app team should have to rediscover the hard way.
+
+That matters not just when you first build the payment flow, but later when the business decides to move accounts or banking channels. A bank switch should not mean rewriting the batch-generation part of your software from scratch.
 
 What you get:
 
@@ -28,6 +31,8 @@ What you get:
 - ESM-first packaging with CJS compatibility and packaging validation in CI
 
 The aim is not to be clever. The aim is to be exact.
+
+As a general design preference, when a bank specification exposes multiple viable upload layouts, this library leans toward the CSV variant rather than fixed-width or more positional alternatives. ASB is the deliberate exception: the supported ASB surface here is MT9.
 
 ## Install
 
@@ -80,14 +85,13 @@ const output = file.toString();
 const buffer = file.toBuffer();
 ```
 
-The portable entrypoint is a bank-neutral wrapper for the common outbound payment/direct-credit use case across ANZ, ASB direct credit, BNZ, Kiwibank, and Westpac payment files.
+The portable entrypoint is a bank-neutral wrapper for the common outbound payment/direct-credit use case across ANZ, ASB direct credit, BNZ, Kiwibank, and Westpac direct credit files.
 
 It keeps business data in one semantic shape:
 
 - `sourceAccount`, `originatorName`, and `paymentDate` at file level
 - `payee` and optional `payer` parties at transaction level
 - optional `category: 'salary-and-wages'` when the payment should render with a bank-specific salary/wages credit code
-- optional `westpacRenderFormat` for Westpac because that bank exposes two payment file layouts
 
 If you expect the same payment data to move between banks, the safest shared text limits are:
 
@@ -187,8 +191,7 @@ const westpacPortableFile = createPortablePaymentFile({
   sourceAccount: '01-0123-0456789-00',
   originatorName: 'ACME PAYROLL',
   paymentDate: '2026-03-23',
-  batchReference: 'MARCH2026',
-  westpacRenderFormat: 'csv'
+  batchReference: 'MARCH2026'
 });
 
 westpacPortableFile.addTransaction(portablePayment);
@@ -196,22 +199,22 @@ westpacPortableFile.addTransaction(portablePayment);
 
 Portable payment field mapping:
 
-| Portable field | ANZ | ASB | BNZ / Kiwibank | Westpac |
-| --- | --- | --- | --- | --- |
-| `originatorName` | Default `subscriberName` when `payer.name` is omitted; 20 chars, rejects overflow | `clientShortName`; 20 chars, truncated | `originatorName`; 20 chars, truncated | `customerName`; 30 chars, rejects overflow |
-| `batchReference` | Not supported | Not supported | `userReference` / `batchReference`; 12 chars, truncated | `fileReference`; 20 chars, rejects overflow |
-| `payee.name` | `otherPartyName`; 20 chars, rejects overflow | `thisParty.name`; 20 chars, truncated | `accountName`; 20 chars, truncated | `accountName`; 20 chars, rejects overflow |
-| `payee.particulars` | `otherPartyParticulars`; 12 chars, rejects overflow | `thisParty.particulars`; 12 chars, truncated | `particulars`; 12 chars, truncated | `payeeParticulars`; 12 chars, rejects overflow |
-| `payee.code` | `otherPartyAlphaReference`; 12 chars, rejects overflow | `code`; 12 chars, truncated | `code`; 12 chars, truncated | Ignored when `payee.analysis` exists; otherwise reused as `payeeAnalysis` with an approximation warning |
-| `payee.reference` | `otherPartyReference`; 12 chars, rejects overflow | `alphaReference`; 12 chars, truncated | `reference`; 12 chars, truncated | Ignored |
-| `payee.analysis` | `otherPartyAnalysisCode`; 12 chars, rejects overflow | Falls back into ASB `code` when `payee.code` is omitted | `information`; 12 chars, truncated | `payeeAnalysis`; 12 chars, rejects overflow |
-| `payer.name` | `subscriberName`; 20 chars, rejects overflow | `otherParty.name`; 20 chars, truncated | Ignored | Ignored |
-| `payer.particulars` | `subscriberParticulars`; 12 chars, rejects overflow | `otherParty.particulars`; 12 chars, truncated | Ignored | Ignored |
-| `payer.code` | Ignored | `otherParty.code`; 12 chars, truncated | Ignored | Ignored |
-| `payer.reference` | `subscriberReference`; 12 chars, rejects overflow | `otherParty.alphaReference`; 12 chars, truncated | Ignored | `payerReference`; 12 chars, rejects overflow |
-| `payer.analysis` | `subscriberAnalysisCode`; 12 chars, rejects overflow | Falls back into ASB `otherParty.code` when `payer.code` is omitted | Ignored | Ignored |
-| `internalReference` | Ignored | `internalReference`; 12 chars, truncated | Ignored | Ignored |
-| `category: 'salary-and-wages'` | Renders transaction code `52` | Renders transaction code `052` | Ignored | Ignored |
+| Portable field                 | ANZ                                                                               | ASB                                                                | BNZ / Kiwibank                                          | Westpac                                                                                                 |
+| ------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `originatorName`               | Default `subscriberName` when `payer.name` is omitted; 20 chars, rejects overflow | `clientShortName`; 20 chars, truncated                             | `originatorName`; 20 chars, truncated                   | `customerName`; 30 chars, rejects overflow                                                              |
+| `batchReference`               | Not supported                                                                     | Not supported                                                      | `userReference` / `batchReference`; 12 chars, truncated | `fileReference`; 20 chars, rejects overflow                                                             |
+| `payee.name`                   | `otherPartyName`; 20 chars, rejects overflow                                      | `thisParty.name`; 20 chars, truncated                              | `accountName`; 20 chars, truncated                      | `accountName`; 20 chars, rejects overflow                                                               |
+| `payee.particulars`            | `otherPartyParticulars`; 12 chars, rejects overflow                               | `thisParty.particulars`; 12 chars, truncated                       | `particulars`; 12 chars, truncated                      | `payeeParticulars`; 12 chars, rejects overflow                                                          |
+| `payee.code`                   | `otherPartyAlphaReference`; 12 chars, rejects overflow                            | `code`; 12 chars, truncated                                        | `code`; 12 chars, truncated                             | Ignored when `payee.analysis` exists; otherwise reused as `payeeAnalysis` with an approximation warning |
+| `payee.reference`              | `otherPartyReference`; 12 chars, rejects overflow                                 | `alphaReference`; 12 chars, truncated                              | `reference`; 12 chars, truncated                        | Ignored                                                                                                 |
+| `payee.analysis`               | `otherPartyAnalysisCode`; 12 chars, rejects overflow                              | Falls back into ASB `code` when `payee.code` is omitted            | `information`; 12 chars, truncated                      | `payeeAnalysis`; 12 chars, rejects overflow                                                             |
+| `payer.name`                   | `subscriberName`; 20 chars, rejects overflow                                      | `otherParty.name`; 20 chars, truncated                             | Ignored                                                 | Ignored                                                                                                 |
+| `payer.particulars`            | `subscriberParticulars`; 12 chars, rejects overflow                               | `otherParty.particulars`; 12 chars, truncated                      | Ignored                                                 | Ignored                                                                                                 |
+| `payer.code`                   | Ignored                                                                           | `otherParty.code`; 12 chars, truncated                             | Ignored                                                 | Ignored                                                                                                 |
+| `payer.reference`              | `subscriberReference`; 12 chars, rejects overflow                                 | `otherParty.alphaReference`; 12 chars, truncated                   | Ignored                                                 | `payerReference`; 12 chars, rejects overflow                                                            |
+| `payer.analysis`               | `subscriberAnalysisCode`; 12 chars, rejects overflow                              | Falls back into ASB `otherParty.code` when `payer.code` is omitted | Ignored                                                 | Ignored                                                                                                 |
+| `internalReference`            | Ignored                                                                           | `internalReference`; 12 chars, truncated                           | Ignored                                                 | Ignored                                                                                                 |
+| `category: 'salary-and-wages'` | Renders transaction code `52`                                                     | Renders transaction code `052`                                     | Ignored                                                 | Renders transaction code `52`                                                                           |
 
 ### Portable payment preflight validation
 
@@ -227,8 +230,7 @@ import {
 const configResult = validatePortablePaymentFileConfig({
   bank: 'westpac',
   sourceAccount: '01-0123-0456789-00',
-  originatorName: 'ACME PAYROLL LTD',
-  westpacRenderFormat: 'csv'
+  originatorName: 'ACME PAYROLL LTD'
 });
 
 const transactionResult = validatePortablePaymentTransaction(
@@ -292,6 +294,25 @@ const portableDebit = {
     reference: 'DEBIT'
   }
 };
+```
+
+ANZ:
+
+```ts
+const anzPortableDebitFile = createPortableDebitFile({
+  bank: 'anz',
+  collectorName: 'ACME RECEIPTS',
+  collectionDate: '2026-03-23',
+  batchCreationDate: '2026-03-23'
+});
+
+anzPortableDebitFile.addTransaction({
+  fromAccount: '12-3200-0123456-00',
+  amount: '45.00',
+  payer: {
+    name: 'MEMBER001'
+  }
+});
 ```
 
 ASB:
@@ -359,32 +380,56 @@ kiwibankPortableDebitFile.addTransaction({
 });
 ```
 
-Portable debit uses the same safe text sizing as portable payments: keep names within 20 printable ASCII characters and keep `particulars`, `code`, `reference`, and `analysis` within 12. ASB exposes the richest neutral debit shape because it has a real contra record and second-party block. BNZ and Kiwibank reuse only selected collector fields as fallbacks when payer-side debit fields are absent.
+Westpac:
+
+```ts
+const westpacPortableDebitFile = createPortableDebitFile({
+  bank: 'westpac',
+  sourceAccount: '01-0123-0456789-00',
+  collectorName: 'ACME RECEIPTS LTD',
+  batchReference: 'MEMBERSHIP',
+  collectionDate: '2026-03-23'
+});
+
+westpacPortableDebitFile.addTransaction({
+  fromAccount: '12-3200-0123456-00',
+  amount: '45.00',
+  payer: {
+    name: 'Jane Smith',
+    particulars: 'MEMBER',
+    analysis: 'MARCH26',
+    reference: 'INV001'
+  }
+});
+```
+
+Portable debit uses the same safe text sizing as portable payments: keep names within 20 printable ASCII characters and keep `particulars`, `code`, `reference`, and `analysis` within 12. ANZ's portable debit mapping is intentionally conservative because its MTS-style file mostly repeats the collector name and uses only one short customer-facing reference field. ASB exposes the richest neutral debit shape because it has a real contra record and second-party block. BNZ and Kiwibank reuse only selected collector fields as fallbacks when payer-side debit fields are absent. Westpac maps payer-facing fields directly into Deskbank CSV debit columns and can reuse `collector.code` as a fallback `payerAnalysis` when the payer does not provide one.
 
 Portable direct debit field mapping:
 
-| Portable field | ASB | BNZ | Kiwibank |
-| --- | --- | --- | --- |
-| `collectorName` | `clientShortName`; 20 chars, truncated | `originatorName`; 20 chars, truncated | `originatorName`; 20 chars, truncated |
-| `collectionDate` | `dueDate` | `processDate` | `processDate` |
-| `sourceAccount` | Not used; ASB debit uses `registrationId` plus optional `contra` instead | `fromAccount`; validated NZ account | `fromAccount`; validated NZ account |
-| `registrationId` | Required; maps to ASB header registration ID field | Not supported | Not supported |
-| `batchReference` | Not supported | `userReference`; 12 chars, truncated | `batchReference`; 12 chars, truncated |
-| `contra.account` | Optional ASB contra account | Not supported | Not supported |
-| `contra.name` | `otherPartyName`; 20 chars, truncated | Not supported | Not supported |
-| `contra.code` | `code`; 12 chars, truncated | Not supported | Not supported |
-| `contra.reference` | `alphaReference`; 12 chars, truncated | Not supported | Not supported |
-| `contra.particulars` | `particulars`; 12 chars, truncated | Not supported | Not supported |
-| `payer.name` | `thisParty.name`; 20 chars, truncated | `accountName`; 20 chars, truncated | `accountName`; 20 chars, truncated |
-| `payer.particulars` | `thisParty.particulars`; 12 chars, truncated | `particulars`; preferred over collector fallback | `particulars`; preferred over collector fallback |
-| `payer.code` | `thisParty.code`; 12 chars, truncated | Not used directly | Not used directly |
-| `payer.reference` | `thisParty.alphaReference`; 12 chars, truncated | `reference`; preferred over collector fallback | `reference`; preferred over collector fallback |
-| `payer.analysis` | Not supported | `information`; 12 chars, truncated | `information`; 12 chars, truncated |
-| `collector.name` | `otherParty.name`; 20 chars, truncated | Ignored | Ignored |
-| `collector.particulars` | `otherParty.particulars`; 12 chars, truncated | Used only when `payer.particulars` is omitted | Used only when `payer.particulars` is omitted |
-| `collector.code` | `otherParty.code`; 12 chars, truncated | Reused as bank `code` field | Reused as bank `code` field |
-| `collector.analysis` | Falls back into ASB `otherParty.code` when `collector.code` is omitted | Reused as bank `code` field only when `collector.code` is omitted | Reused as bank `code` field only when `collector.code` is omitted |
-| `collector.reference` | `otherParty.alphaReference`; 12 chars, truncated | Used only when `payer.reference` is omitted | Used only when `payer.reference` is omitted |
+| Portable field          | ANZ                                                                                  | ASB                                                                      | BNZ                                                               | Kiwibank                                                          | Westpac                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------- |
+| `collectorName`         | Reused as both `otherPartyName` and `subscriberName`; 20 chars, rejected if too long | `clientShortName`; 20 chars, truncated                                   | `originatorName`; 20 chars, truncated                             | `originatorName`; 20 chars, truncated                             | `customerName`; 30 chars, rejects overflow                      |
+| `collectionDate`        | `batchDueDate`                                                                       | `dueDate`                                                                | `processDate`                                                     | `processDate`                                                     | `scheduledDate`                                                 |
+| `batchCreationDate`     | Optional ANZ header creation date                                                    | Not supported                                                            | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `sourceAccount`         | Not used                                                                             | Not used; ASB debit uses `registrationId` plus optional `contra` instead | `fromAccount`; validated NZ account                               | `fromAccount`; validated NZ account                               | `toAccount`; validated NZ account                               |
+| `registrationId`        | Not supported                                                                        | Required; maps to ASB header registration ID field                       | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `batchReference`        | Not supported                                                                        | Not supported                                                            | `userReference`; 12 chars, truncated                              | `batchReference`; 12 chars, truncated                             | `fileReference`; 20 chars, rejects overflow                     |
+| `contra.account`        | Not supported                                                                        | Optional ASB contra account                                              | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `contra.name`           | Not supported                                                                        | `otherPartyName`; 20 chars, truncated                                    | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `contra.code`           | Not supported                                                                        | `code`; 12 chars, truncated                                              | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `contra.reference`      | Not supported                                                                        | `alphaReference`; 12 chars, truncated                                    | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `contra.particulars`    | Not supported                                                                        | `particulars`; 12 chars, truncated                                       | Not supported                                                     | Not supported                                                     | Not supported                                                   |
+| `payer.name`            | Used as fallback for `otherPartyReference` when `payer.reference` is absent          | `thisParty.name`; 20 chars, truncated                                    | `accountName`; 20 chars, truncated                                | `accountName`; 20 chars, truncated                                | `accountName`; 20 chars, rejects overflow                       |
+| `payer.particulars`     | Ignored                                                                              | `thisParty.particulars`; 12 chars, truncated                             | `particulars`; preferred over collector fallback                  | `particulars`; preferred over collector fallback                  | `payerParticulars`; 12 chars, rejects overflow                  |
+| `payer.code`            | Ignored                                                                              | `thisParty.code`; 12 chars, truncated                                    | Not used directly                                                 | Not used directly                                                 | Not used directly                                               |
+| `payer.reference`       | Preferred `otherPartyReference`; 12 chars, rejected if too long                      | `thisParty.alphaReference`; 12 chars, truncated                          | `reference`; preferred over collector fallback                    | `reference`; preferred over collector fallback                    | `payerReference`; 12 chars, rejects overflow                    |
+| `payer.analysis`        | Ignored                                                                              | Not supported                                                            | `information`; 12 chars, truncated                                | `information`; 12 chars, truncated                                | `payerAnalysis`; 12 chars, rejects overflow                     |
+| `collector.name`        | Preferred over `collectorName` for both rendered ANZ name fields                     | `otherParty.name`; 20 chars, truncated                                   | Ignored                                                           | Ignored                                                           | Ignored                                                         |
+| `collector.particulars` | Ignored                                                                              | `otherParty.particulars`; 12 chars, truncated                            | Used only when `payer.particulars` is omitted                     | Used only when `payer.particulars` is omitted                     | Ignored                                                         |
+| `collector.code`        | Ignored                                                                              | `otherParty.code`; 12 chars, truncated                                   | Reused as bank `code` field                                       | Reused as bank `code` field                                       | Reused as `payerAnalysis` only when `payer.analysis` is omitted |
+| `collector.analysis`    | Ignored                                                                              | Falls back into ASB `otherParty.code` when `collector.code` is omitted   | Reused as bank `code` field only when `collector.code` is omitted | Reused as bank `code` field only when `collector.code` is omitted | Ignored                                                         |
+| `collector.reference`   | Ignored                                                                              | `otherParty.alphaReference`; 12 chars, truncated                         | Used only when `payer.reference` is omitted                       | Used only when `payer.reference` is omitted                       | Ignored                                                         |
 
 ## Bank-Specific Adapters
 
@@ -392,15 +437,17 @@ The portable examples above show the bank-neutral layer.
 
 The examples below switch back to the underlying bank-specific adapters. Use these when you need the bank-native file shape directly, or when you need capabilities that are not intentionally abstracted by the portable API.
 
-### ANZ Domestic Extended
+Where the bank documentation offers multiple reasonable file layouts, the adapter surface usually follows the CSV-oriented one. The main exception is ASB, whose supported direct-credit and direct-debit adapters are MT9-based.
+
+### ANZ Direct Credit (Domestic Extended / MTS)
 
 ```ts
-import { createDomesticExtendedFile } from 'nz-bank-batch/anz';
+import { createDirectCreditFile } from 'nz-bank-batch/anz';
 import { assertCents } from 'nz-bank-batch/nz';
 
 const amount = assertCents('12.50');
 
-const file = createDomesticExtendedFile({
+const file = createDirectCreditFile({
   batchDueDate: '2026-03-23',
   batchCreationDate: new Date(Date.UTC(2026, 2, 23))
 });
@@ -408,19 +455,59 @@ const file = createDomesticExtendedFile({
 file.addTransaction({
   toAccount: '12-3200-0123456-00',
   amount,
-  otherPartyName: 'Jane Smith',
-  otherPartyReference: 'SALARY',
-  otherPartyAnalysisCode: 'MARCH',
-  otherPartyParticulars: 'PAY',
-  subscriberName: 'ACME PAYROLL',
-  subscriberAnalysisCode: 'MARCH2026',
-  subscriberReference: 'APR',
-  subscriberParticulars: 'PAY'
+  payeeName: 'Jane Smith',
+  payeeReference: 'SALARY',
+  payeeAnalysis: 'MARCH',
+  payeeParticulars: 'PAY',
+  originatorName: 'ACME PAYROLL',
+  originatorAnalysis: 'MARCH2026',
+  originatorReference: 'APR',
+  originatorParticulars: 'PAY'
 });
 
 const output = file.toString();
 const buffer = file.toBuffer();
 ```
+
+The current ANZ adapter targets the MTS-style direct credit file with Header / Transaction /
+Control records.
+
+`createDirectCreditFile()` and `parseDirectCreditFile()` are the clearest names for that outward-
+payment use case, using business fields like `payeeName` and `originatorName`. `createDomesticExtendedFile()` and `parseDomesticExtendedFile()` remain available
+as the raw format-specific API when you need the original ANZ field labels directly.
+
+This package does not currently implement:
+
+- ANZ's simpler one-line domestic payment CSV
+
+### ANZ Direct Debit (MTS)
+
+```ts
+import { createDirectDebitFile } from 'nz-bank-batch/anz';
+import { assertCents } from 'nz-bank-batch/nz';
+
+const amount = assertCents('45.00');
+
+const file = createDirectDebitFile({
+  batchDueDate: '2026-03-23',
+  batchCreationDate: new Date(Date.UTC(2026, 2, 23))
+});
+
+file.addTransaction({
+  fromAccount: '12-3200-0123456-00',
+  amount,
+  organisationName: 'ACME RECEIPTS',
+  customerReference: 'MEMBER001'
+});
+
+const output = file.toString();
+const buffer = file.toBuffer();
+```
+
+The ANZ direct debit adapter uses the same MTS-style Header / Transaction / Control structure as
+the direct credit adapter, but fixes the transaction code to `00` and uses `fromAccount` debit
+semantics on each transaction. Its public API intentionally exposes business fields
+`organisationName` and `customerReference` instead of the underlying credit-style ANZ labels.
 
 ### BNZ IB4B direct credit
 
@@ -576,12 +663,12 @@ const output = file.toString();
 const buffer = file.toBuffer();
 ```
 
-### Westpac Deskbank Payment CSV
+### Westpac Deskbank Direct Credit CSV
 
 ```ts
-import { createPaymentCsvFile } from 'nz-bank-batch/westpac';
+import { createDirectCreditFile } from 'nz-bank-batch/westpac';
 
-const file = createPaymentCsvFile({
+const file = createDirectCreditFile({
   fromAccount: '01-0123-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   fileReference: 'MARCH2026',
@@ -592,6 +679,7 @@ file.addTransaction({
   toAccount: '12-3200-0123456-00',
   amount: '12.50',
   accountName: 'Jane Smith',
+  transactionCode: '52',
   payerReference: 'PAY001',
   payeeAnalysis: 'MARCH26',
   payeeParticulars: 'SALARY'
@@ -601,25 +689,25 @@ const output = file.toString();
 const buffer = file.toBuffer();
 ```
 
-### Westpac Deskbank Payment Fixed Length
+### Westpac Deskbank Direct Debit CSV
 
 ```ts
-import { createPaymentFixedLengthFile } from 'nz-bank-batch/westpac';
+import { createDirectDebitFile } from 'nz-bank-batch/westpac';
 
-const file = createPaymentFixedLengthFile({
-  fromAccount: '01-0123-0456789-00',
-  customerName: 'ACME PAYROLL LTD',
-  fileReference: 'MARCH2026',
+const file = createDirectDebitFile({
+  toAccount: '01-0123-0456789-00',
+  customerName: 'ACME RECEIPTS LTD',
+  fileReference: 'MEMBERSHIP',
   scheduledDate: new Date(Date.UTC(2026, 2, 23))
 });
 
 file.addTransaction({
-  toAccount: '12-3200-0123456-00',
-  amount: '12.50',
+  fromAccount: '12-3200-0123456-00',
+  amount: '45.00',
   accountName: 'Jane Smith',
-  payerReference: 'PAY001',
-  payeeAnalysis: 'MARCH26',
-  payeeParticulars: 'SALARY'
+  payerReference: 'INV001',
+  payerAnalysis: 'MARCH26',
+  payerParticulars: 'MEMBER'
 });
 
 const output = file.toString();
@@ -694,10 +782,16 @@ Key functions:
 
 ```ts
 import {
+  createDirectCreditFile,
   createDomesticExtendedFile,
   createFile,
+  parseDirectCreditFile,
   parseDomesticExtendedFile,
   parseFile,
+  type AnzDirectCreditFile,
+  type AnzDirectCreditFileConfig,
+  type AnzDirectCreditTransaction,
+  type AnzDirectCreditTransactionCode,
   type AnzDomesticExtendedFile,
   type AnzDomesticExtendedFileConfig,
   type AnzDomesticExtendedTransaction,
@@ -707,7 +801,7 @@ import {
 } from 'nz-bank-batch/anz';
 ```
 
-`parseDomesticExtendedFile()` parses ANZ Domestic Extended files back into typed batch config, transactions, and control-record summary data. `parseFile()` is an alias for the same format.
+`createDirectCreditFile()` and `parseDirectCreditFile()` describe the business meaning of the supported ANZ format. `createDomesticExtendedFile()` and `parseDomesticExtendedFile()` remain as format-specific aliases for the same MTS-style direct credit layout, and `parseFile()` is still the generic alias.
 
 ### ASB
 
@@ -742,28 +836,43 @@ import {
 
 ```ts
 import {
+  createDirectCreditFile,
+  createDirectDebitFile,
   createPaymentCsvFile,
-  createPaymentFixedLengthFile,
+  parseDirectCreditFile,
+  parseDirectDebitFile,
+  parseFile,
   parsePaymentCsvFile,
-  parsePaymentFixedLengthFile,
+  type ParsedWestpacDirectCreditFile,
+  type ParsedWestpacDirectCreditTransaction,
+  type ParsedWestpacDirectDebitFile,
+  type ParsedWestpacDirectDebitTransaction,
+  type ParsedWestpacFile,
   type ParsedWestpacPaymentCsvFile,
+  type ParsedWestpacPaymentFile,
+  type WestpacDirectCreditFile,
+  type WestpacDirectCreditFileConfig,
+  type WestpacDirectCreditTransaction,
+  type WestpacDirectCreditTransactionCode,
+  type WestpacDirectDebitFile,
+  type WestpacDirectDebitFileConfig,
+  type WestpacDirectDebitTransaction,
   type WestpacPaymentFile,
   type WestpacPaymentFileConfig,
   type WestpacPaymentTransaction,
-  type ParsedWestpacPaymentFile,
-  type ParsedWestpacPaymentFixedLengthFile,
   type ParsedWestpacPaymentTransaction
 } from 'nz-bank-batch/westpac';
 ```
 
-The current Westpac adapter targets the Business Online Deskbank payment import layout documented in pages 4-8 of the reference guide:
+The current Westpac adapter targets the Business Online Deskbank CSV import layout for both direct credits and direct debits:
 
 - CSV records are plain comma-delimited fields with no double-quote escaping
 - header records use `A` and detail records use `D`
 - dates render as `DDMMYY`
-- fixed-length records follow the documented 180-character header/detail layout
+- direct credit detail rows use transaction code `50` or `52` with MTS source `DC`
+- direct debit detail rows use transaction code `00` with MTS source `DD`
 
-`parsePaymentCsvFile()` and `parsePaymentFixedLengthFile()` parse those two Deskbank payment layouts into typed metadata, transactions, and derived summary totals.
+`createDirectCreditFile()` and `parseDirectCreditFile()` describe the business meaning of the direct-credit CSV layout. `createPaymentCsvFile()` and `parsePaymentCsvFile()` remain as direct-credit aliases for compatibility. `createDirectDebitFile()`, `parseDirectDebitFile()`, and `parseFile()` handle the direct-debit CSV and generic Westpac CSV parsing surface.
 
 ### BNZ
 
@@ -859,10 +968,7 @@ The hook receives `NzAccountParts` and can:
 Example:
 
 ```ts
-import {
-  assertNzAccount,
-  type BranchValidationHook
-} from 'nz-bank-batch/nz';
+import { assertNzAccount, type BranchValidationHook } from 'nz-bank-batch/nz';
 
 const allowedBranches = new Set(['123350', '123351', '123399']);
 
@@ -977,11 +1083,13 @@ npm run pack:check
 
 Implemented in v1:
 
-- ANZ Domestic Extended direct credit
-- ANZ Domestic Extended payment upload format
+- ANZ direct credit (Domestic Extended / MTS)
 - ASB MT9 direct credit and direct debit
 - BNZ IB4B direct credit and direct debit
 - Kiwibank IB4B direct credit and direct debit
-- Westpac Payment CSV and Payment Fixed Length EFT payments
+- Westpac Deskbank CSV direct credit and direct debit
 - NZ account primitives, cents parsing, date validation, CSV rendering, and hash totals
 
+Not yet implemented:
+
+- ANZ simple domestic payment CSV

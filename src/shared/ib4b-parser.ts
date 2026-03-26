@@ -102,7 +102,11 @@ function parseDate(field: string, fieldName: string, lineNumber: number) {
   }
 }
 
-function parsePositiveInteger(field: string, fieldName: string, lineNumber: number) {
+function parsePositiveInteger(
+  field: string,
+  fieldName: string,
+  lineNumber: number
+) {
   if (!/^\d+$/.test(field)) {
     return fail(`Invalid IB4B ${fieldName}.`, {
       lineNumber,
@@ -118,7 +122,10 @@ function mapTransactionCode(
   renderedCode: string,
   lineNumber: number
 ): Result<
-  { readonly kind: Ib4bFileType; readonly transactionCode: Ib4bTransactionCode },
+  {
+    readonly kind: Ib4bFileType;
+    readonly transactionCode: Ib4bTransactionCode;
+  },
   AdapterError
 > {
   if (renderedCode === '50') {
@@ -136,11 +143,15 @@ function mapTransactionCode(
   });
 }
 
-export function parseIb4bFile(input: string | Buffer): Result<ParsedIb4bFile, Ib4bParseError> {
+export function parseIb4bFile(
+  input: string | Buffer
+): Result<ParsedIb4bFile, Ib4bParseError> {
   const lines = splitRecords(input);
 
   if (lines.length < 3) {
-    return fail('IB4B file must contain a header, at least one detail record, and a trailer.');
+    return fail(
+      'IB4B file must contain a header, at least one detail record, and a trailer.'
+    );
   }
 
   const headerResult = parseFieldCount(lines[0]!, 9, 'header', 1);
@@ -192,7 +203,10 @@ export function parseIb4bFile(input: string | Buffer): Result<ParsedIb4bFile, Ib
 
   const transactions: ParsedIb4bTransaction[] = [];
   let parsedType:
-    | { readonly kind: Ib4bFileType; readonly transactionCode: Ib4bTransactionCode }
+    | {
+        readonly kind: Ib4bFileType;
+        readonly transactionCode: Ib4bTransactionCode;
+      }
     | undefined;
   let originatorName: string | undefined;
 
@@ -221,7 +235,9 @@ export function parseIb4bFile(input: string | Buffer): Result<ParsedIb4bFile, Ib
 
     if (parsedType === undefined) {
       parsedType = transactionTypeResult.value;
-    } else if (parsedType.transactionCode !== transactionTypeResult.value.transactionCode) {
+    } else if (
+      parsedType.transactionCode !== transactionTypeResult.value.transactionCode
+    ) {
       return fail('IB4B file contains mixed transaction codes.', {
         lineNumber,
         expected: parsedType.transactionCode,
@@ -239,13 +255,21 @@ export function parseIb4bFile(input: string | Buffer): Result<ParsedIb4bFile, Ib
       });
     }
 
-    const counterpartyAccountResult = parseAccount(detail[1]!, 'counterpartyAccount', lineNumber);
+    const counterpartyAccountResult = parseAccount(
+      detail[1]!,
+      'counterpartyAccount',
+      lineNumber
+    );
 
     if (!counterpartyAccountResult.ok) {
       return counterpartyAccountResult;
     }
 
-    const amountResult = parsePositiveInteger(detail[3]!, 'amountCents', lineNumber);
+    const amountResult = parsePositiveInteger(
+      detail[3]!,
+      'amountCents',
+      lineNumber
+    );
 
     if (!amountResult.ok) {
       return amountResult;
@@ -263,7 +287,12 @@ export function parseIb4bFile(input: string | Buffer): Result<ParsedIb4bFile, Ib
   }
 
   const trailerLineNumber = lines.length;
-  const trailerResult = parseFieldCount(lines.at(-1)!, 4, 'trailer', trailerLineNumber);
+  const trailerResult = parseFieldCount(
+    lines.at(-1)!,
+    4,
+    'trailer',
+    trailerLineNumber
+  );
 
   if (!trailerResult.ok) {
     return trailerResult;
@@ -278,19 +307,31 @@ export function parseIb4bFile(input: string | Buffer): Result<ParsedIb4bFile, Ib
     });
   }
 
-  const totalResult = parsePositiveInteger(trailer[1]!, 'totalCents', trailerLineNumber);
+  const totalResult = parsePositiveInteger(
+    trailer[1]!,
+    'totalCents',
+    trailerLineNumber
+  );
 
   if (!totalResult.ok) {
     return totalResult;
   }
 
-  const countResult = parsePositiveInteger(trailer[2]!, 'count', trailerLineNumber);
+  const countResult = parsePositiveInteger(
+    trailer[2]!,
+    'count',
+    trailerLineNumber
+  );
 
   if (!countResult.ok) {
     return countResult;
   }
 
-  const hashResult = parsePositiveInteger(trailer[3]!, 'hashTotal', trailerLineNumber);
+  const hashResult = parsePositiveInteger(
+    trailer[3]!,
+    'hashTotal',
+    trailerLineNumber
+  );
 
   if (!hashResult.ok) {
     return hashResult;

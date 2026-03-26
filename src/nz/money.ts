@@ -9,9 +9,7 @@ export function toCents(value: bigint): Cents {
   return value as Cents;
 }
 
-export function parseCents(
-  input: string | bigint
-): Result<Cents, MoneyError> {
+export function parseCents(input: string | bigint): Result<Cents, MoneyError> {
   if (typeof input === 'bigint') {
     return ok(toCents(input));
   }
@@ -34,9 +32,13 @@ export function parseCents(
   }
 
   return err(
-    new MoneyError('INVALID_MONEY', 'Money value must be a decimal string or bigint.', {
-      input
-    })
+    new MoneyError(
+      'INVALID_MONEY',
+      'Money value must be a decimal string or bigint.',
+      {
+        input
+      }
+    )
   );
 }
 

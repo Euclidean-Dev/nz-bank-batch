@@ -6,8 +6,14 @@ import { toCents } from '../../nz/money.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
 import type { NzAccountError } from '../../shared/errors.js';
 import type {
+  AnzDirectCreditFileError,
+  AnzDirectDebitFileError,
   AnzDomesticExtendedFileError,
   AnzDomesticExtendedTransactionCode,
+  ParseAnzDirectCreditFile,
+  ParsedAnzDirectCreditFile,
+  ParseAnzDirectDebitFile,
+  ParsedAnzDirectDebitFile,
   ParsedAnzDomesticExtendedFile,
   ParsedAnzDomesticExtendedTransaction
 } from './types.js';
@@ -36,17 +42,25 @@ function parseDate(field: string, fieldName: string, lineNumber: number) {
     return ok(assertYyyyMmDd(field));
   } catch (error) {
     return err(
-      new AdapterError('ADAPTER_CONFIG', `Invalid ANZ domestic extended ${fieldName}.`, {
-        lineNumber,
-        field: fieldName,
-        value: field,
-        cause: error
-      })
+      new AdapterError(
+        'ADAPTER_CONFIG',
+        `Invalid ANZ domestic extended ${fieldName}.`,
+        {
+          lineNumber,
+          field: fieldName,
+          value: field,
+          cause: error
+        }
+      )
     );
   }
 }
 
-function parsePositiveInteger(field: string, fieldName: string, lineNumber: number) {
+function parsePositiveInteger(
+  field: string,
+  fieldName: string,
+  lineNumber: number
+) {
   if (!/^\d+$/.test(field)) {
     return fail(`Invalid ANZ domestic extended ${fieldName}.`, {
       lineNumber,
@@ -61,7 +75,10 @@ function parsePositiveInteger(field: string, fieldName: string, lineNumber: numb
 function parseRenderedAccount(
   rendered: string,
   lineNumber: number
-): Result<{ readonly toAccount: string; readonly hashContribution: bigint }, AdapterError | NzAccountError> {
+): Result<
+  { readonly toAccount: string; readonly hashContribution: bigint },
+  AdapterError | NzAccountError
+> {
   if (!/^\d{16,17}$/.test(rendered)) {
     return fail('Invalid ANZ domestic extended rendered account.', {
       lineNumber,
@@ -105,12 +122,25 @@ function parseRenderedAccount(
 
 function normaliseHashTotal(value: bigint): bigint {
   const digits = value.toString();
-  return BigInt(digits.length > 11 ? digits.slice(-11) : digits.padStart(11, '0'));
+  return BigInt(
+    digits.length > 11 ? digits.slice(-11) : digits.padStart(11, '0')
+  );
 }
 
-function buildSummary(transactions: readonly { readonly amount: bigint; readonly hashContribution: bigint }[]): BatchFileSummary {
-  const total = transactions.reduce((sum, transaction) => sum + transaction.amount, 0n);
-  const hash = transactions.reduce((sum, transaction) => sum + transaction.hashContribution, 0n);
+function buildSummary(
+  transactions: readonly {
+    readonly amount: bigint;
+    readonly hashContribution: bigint;
+  }[]
+): BatchFileSummary {
+  const total = transactions.reduce(
+    (sum, transaction) => sum + transaction.amount,
+    0n
+  );
+  const hash = transactions.reduce(
+    (sum, transaction) => sum + transaction.hashContribution,
+    0n
+  );
 
   return {
     count: transactions.length,
@@ -125,7 +155,9 @@ export function parseDomesticExtendedFile(
   const lines = splitLines(input);
 
   if (lines.length < 2) {
-    return fail('ANZ domestic extended file must contain at least a header and control record.');
+    return fail(
+      'ANZ domestic extended file must contain at least a header and control record.'
+    );
   }
 
   const header = lines[0]!.split(',');
@@ -143,7 +175,11 @@ export function parseDomesticExtendedFile(
     return batchDueDateResult;
   }
 
-  const batchCreationDateResult = parseDate(header[7] ?? '', 'batchCreationDate', 1);
+  const batchCreationDateResult = parseDate(
+    header[7] ?? '',
+    'batchCreationDate',
+    1
+  );
 
   if (!batchCreationDateResult.ok) {
     return batchCreationDateResult;
@@ -182,13 +218,18 @@ export function parseDomesticExtendedFile(
       return accountResult;
     }
 
-    const amountResult = parsePositiveInteger(fields[3] ?? '', 'amount', lineNumber);
+    const amountResult = parsePositiveInteger(
+      fields[3] ?? '',
+      'amount',
+      lineNumber
+    );
 
     if (!amountResult.ok) {
       return amountResult;
     }
 
-    const transactionCode = (fields[2] ?? '') as AnzDomesticExtendedTransactionCode;
+    const transactionCode = (fields[2] ??
+      '') as AnzDomesticExtendedTransactionCode;
 
     if (!['50', '52', '00'].includes(transactionCode)) {
       return fail('Unsupported ANZ domestic extended transaction code.', {
@@ -226,19 +267,31 @@ export function parseDomesticExtendedFile(
     });
   }
 
-  const totalResult = parsePositiveInteger(control[1] ?? '', 'totalCents', controlLineNumber);
+  const totalResult = parsePositiveInteger(
+    control[1] ?? '',
+    'totalCents',
+    controlLineNumber
+  );
 
   if (!totalResult.ok) {
     return totalResult;
   }
 
-  const countResult = parsePositiveInteger(control[2] ?? '', 'count', controlLineNumber);
+  const countResult = parsePositiveInteger(
+    control[2] ?? '',
+    'count',
+    controlLineNumber
+  );
 
   if (!countResult.ok) {
     return countResult;
   }
 
-  const hashResult = parsePositiveInteger(control[3] ?? '', 'hashTotal', controlLineNumber);
+  const hashResult = parsePositiveInteger(
+    control[3] ?? '',
+    'hashTotal',
+    controlLineNumber
+  );
 
   if (!hashResult.ok) {
     return hashResult;
@@ -252,27 +305,36 @@ export function parseDomesticExtendedFile(
   );
 
   if (countResult.value !== BigInt(transactions.length)) {
-    return fail('ANZ domestic extended control count does not match transaction count.', {
-      lineNumber: controlLineNumber,
-      expected: transactions.length,
-      actual: Number(countResult.value)
-    });
+    return fail(
+      'ANZ domestic extended control count does not match transaction count.',
+      {
+        lineNumber: controlLineNumber,
+        expected: transactions.length,
+        actual: Number(countResult.value)
+      }
+    );
   }
 
   if (totalResult.value !== (summary.totalCents as bigint)) {
-    return fail('ANZ domestic extended control total does not match transaction total.', {
-      lineNumber: controlLineNumber,
-      expected: (summary.totalCents as bigint).toString(),
-      actual: totalResult.value.toString()
-    });
+    return fail(
+      'ANZ domestic extended control total does not match transaction total.',
+      {
+        lineNumber: controlLineNumber,
+        expected: (summary.totalCents as bigint).toString(),
+        actual: totalResult.value.toString()
+      }
+    );
   }
 
   if (hashResult.value !== summary.hashTotal) {
-    return fail('ANZ domestic extended control hash does not match computed hash total.', {
-      lineNumber: controlLineNumber,
-      expected: summary.hashTotal.toString(),
-      actual: hashResult.value.toString()
-    });
+    return fail(
+      'ANZ domestic extended control hash does not match computed hash total.',
+      {
+        lineNumber: controlLineNumber,
+        expected: summary.hashTotal.toString(),
+        actual: hashResult.value.toString()
+      }
+    );
   }
 
   return ok({
@@ -298,4 +360,110 @@ export function parseDomesticExtendedFile(
   });
 }
 
+export const parseDirectCreditFile: ParseAnzDirectCreditFile = (
+  input
+): Result<ParsedAnzDirectCreditFile, AnzDirectCreditFileError> => {
+  const result = parseDomesticExtendedFile(input);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  for (const [index, transaction] of result.value.transactions.entries()) {
+    if (!['50', '52'].includes(transaction.transactionCode)) {
+      return fail('ANZ direct credit transaction must use code 50 or 52.', {
+        lineNumber: index + 2,
+        value: transaction.transactionCode
+      });
+    }
+  }
+
+  return ok({
+    kind: 'domestic-extended',
+    batchDueDate: result.value.batchDueDate,
+    batchCreationDate: result.value.batchCreationDate,
+    transactions: result.value.transactions.map((transaction) => ({
+      toAccount: transaction.toAccount,
+      renderedAccount: transaction.renderedAccount,
+      amount: transaction.amount,
+      transactionCode: transaction.transactionCode as '50' | '52',
+      payeeName: transaction.otherPartyName,
+      payeeReference: transaction.otherPartyReference,
+      payeeAnalysis: transaction.otherPartyAnalysisCode,
+      payeeCode: transaction.otherPartyAlphaReference,
+      payeeParticulars: transaction.otherPartyParticulars,
+      originatorName: transaction.subscriberName,
+      originatorAnalysis: transaction.subscriberAnalysisCode,
+      originatorReference: transaction.subscriberReference,
+      originatorParticulars: transaction.subscriberParticulars
+    })),
+    summary: result.value.summary
+  });
+};
+export const parseDirectDebitFile: ParseAnzDirectDebitFile = (
+  input
+): Result<ParsedAnzDirectDebitFile, AnzDirectDebitFileError> => {
+  const result = parseDomesticExtendedFile(input);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  for (const [index, transaction] of result.value.transactions.entries()) {
+    if (transaction.transactionCode !== '00') {
+      return fail('ANZ direct debit transaction must use code 00.', {
+        lineNumber: index + 2,
+        value: transaction.transactionCode
+      });
+    }
+
+    if (transaction.subscriberName !== transaction.otherPartyName) {
+      return fail(
+        'ANZ direct debit transaction organisation names must match in both ANZ name fields.',
+        {
+          lineNumber: index + 2,
+          otherPartyName: transaction.otherPartyName,
+          subscriberName: transaction.subscriberName
+        }
+      );
+    }
+
+    if (
+      transaction.otherPartyAnalysisCode.length > 0 ||
+      transaction.otherPartyAlphaReference.length > 0 ||
+      transaction.otherPartyParticulars.length > 0 ||
+      transaction.subscriberAnalysisCode.length > 0 ||
+      transaction.subscriberReference.length > 0 ||
+      transaction.subscriberParticulars.length > 0
+    ) {
+      return fail(
+        'ANZ direct debit transaction contains non-blank fields outside the supported layout.',
+        {
+          lineNumber: index + 2,
+          otherPartyAnalysisCode: transaction.otherPartyAnalysisCode,
+          otherPartyAlphaReference: transaction.otherPartyAlphaReference,
+          otherPartyParticulars: transaction.otherPartyParticulars,
+          subscriberAnalysisCode: transaction.subscriberAnalysisCode,
+          subscriberReference: transaction.subscriberReference,
+          subscriberParticulars: transaction.subscriberParticulars
+        }
+      );
+    }
+  }
+
+  return ok({
+    kind: 'direct-debit',
+    batchDueDate: result.value.batchDueDate,
+    batchCreationDate: result.value.batchCreationDate,
+    transactions: result.value.transactions.map((transaction) => ({
+      fromAccount: transaction.toAccount,
+      renderedAccount: transaction.renderedAccount,
+      amount: transaction.amount,
+      transactionCode: '00',
+      organisationName: transaction.otherPartyName,
+      customerReference: transaction.otherPartyReference
+    })),
+    summary: result.value.summary
+  });
+};
 export const parseFile = parseDomesticExtendedFile;

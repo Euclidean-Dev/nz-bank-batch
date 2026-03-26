@@ -37,7 +37,9 @@ function invalidFormat(input: DateInput): DateError {
 }
 
 function invalidCalendarDay(input: DateInput): DateError {
-  return new DateError('INVALID_DATE', 'Date is not a valid calendar day.', { input });
+  return new DateError('INVALID_DATE', 'Date is not a valid calendar day.', {
+    input
+  });
 }
 
 function buildDateParts(
@@ -67,10 +69,20 @@ function parseCompactSix(
   const [, first, second, third] = match;
 
   if (order === 'yymmdd') {
-    return buildDateParts(originalInput, 2000 + Number(first), Number(second), Number(third));
+    return buildDateParts(
+      originalInput,
+      2000 + Number(first),
+      Number(second),
+      Number(third)
+    );
   }
 
-  return buildDateParts(originalInput, 2000 + Number(third), Number(second), Number(first));
+  return buildDateParts(
+    originalInput,
+    2000 + Number(third),
+    Number(second),
+    Number(first)
+  );
 }
 
 function parseCompactEight(
@@ -78,7 +90,9 @@ function parseCompactEight(
   originalInput: DateInput,
   order: 'yyyymmdd' | 'ddmmyyyy'
 ): Result<ParsedDateParts, DateError> {
-  const match = (order === 'yyyymmdd' ? YYYYMMDD_PATTERN : DDMMYYYY_PATTERN).exec(input);
+  const match = (
+    order === 'yyyymmdd' ? YYYYMMDD_PATTERN : DDMMYYYY_PATTERN
+  ).exec(input);
 
   if (!match) {
     return err(invalidFormat(originalInput));
@@ -87,10 +101,20 @@ function parseCompactEight(
   const [, first, second, third] = match;
 
   if (order === 'yyyymmdd') {
-    return buildDateParts(originalInput, Number(first), Number(second), Number(third));
+    return buildDateParts(
+      originalInput,
+      Number(first),
+      Number(second),
+      Number(third)
+    );
   }
 
-  return buildDateParts(originalInput, Number(third), Number(second), Number(first));
+  return buildDateParts(
+    originalInput,
+    Number(third),
+    Number(second),
+    Number(first)
+  );
 }
 
 function parseStringDateInput(
@@ -106,13 +130,18 @@ function parseStringDateInput(
   }
 
   if (/^\d{8}$/.test(input)) {
-    const preferred = parseCompactEight(input, originalInput, compactEightOrder);
+    const preferred = parseCompactEight(
+      input,
+      originalInput,
+      compactEightOrder
+    );
 
     if (preferred.ok) {
       return preferred;
     }
 
-    const fallbackOrder = compactEightOrder === 'yyyymmdd' ? 'ddmmyyyy' : 'yyyymmdd';
+    const fallbackOrder =
+      compactEightOrder === 'yyyymmdd' ? 'ddmmyyyy' : 'yyyymmdd';
     return parseCompactEight(input, originalInput, fallbackOrder);
   }
 
@@ -120,14 +149,24 @@ function parseStringDateInput(
 
   if (yearFirstLong) {
     const [, yearRaw, monthRaw, dayRaw] = yearFirstLong;
-    return buildDateParts(originalInput, Number(yearRaw), Number(monthRaw), Number(dayRaw));
+    return buildDateParts(
+      originalInput,
+      Number(yearRaw),
+      Number(monthRaw),
+      Number(dayRaw)
+    );
   }
 
   const dayFirstLong = DD_MM_YYYY_PATTERN.exec(input);
 
   if (dayFirstLong) {
     const [, dayRaw, monthRaw, yearRaw] = dayFirstLong;
-    return buildDateParts(originalInput, Number(yearRaw), Number(monthRaw), Number(dayRaw));
+    return buildDateParts(
+      originalInput,
+      Number(yearRaw),
+      Number(monthRaw),
+      Number(dayRaw)
+    );
   }
 
   return err(invalidFormat(originalInput));
@@ -144,7 +183,12 @@ function parseDateInput(
       return err(invalidFormat(input));
     }
 
-    return buildDateParts(input, input.getUTCFullYear(), input.getUTCMonth() + 1, input.getUTCDate());
+    return buildDateParts(
+      input,
+      input.getUTCFullYear(),
+      input.getUTCMonth() + 1,
+      input.getUTCDate()
+    );
   }
 
   return parseStringDateInput(input.trim(), input, options);
@@ -164,7 +208,10 @@ function formatParts(parts: ParsedDateParts) {
 }
 
 export function parseYyMmDd(input: DateInput): Result<YyMmDd, DateError> {
-  const result = parseDateInput(input, { compactSixOrder: 'yymmdd', compactEightOrder: 'yyyymmdd' });
+  const result = parseDateInput(input, {
+    compactSixOrder: 'yymmdd',
+    compactEightOrder: 'yyyymmdd'
+  });
 
   if (!result.ok) {
     return result;
@@ -184,7 +231,10 @@ export function assertYyMmDd(input: DateInput): YyMmDd {
 }
 
 export function parseYyyyMmDd(input: DateInput): Result<YyyyMmDd, DateError> {
-  const result = parseDateInput(input, { compactSixOrder: 'yymmdd', compactEightOrder: 'yyyymmdd' });
+  const result = parseDateInput(input, {
+    compactSixOrder: 'yymmdd',
+    compactEightOrder: 'yyyymmdd'
+  });
 
   if (!result.ok) {
     return result;
@@ -204,7 +254,10 @@ export function assertYyyyMmDd(input: DateInput): YyyyMmDd {
 }
 
 export function parseDdMmYy(input: DateInput): Result<string, DateError> {
-  const result = parseDateInput(input, { compactSixOrder: 'ddmmyy', compactEightOrder: 'ddmmyyyy' });
+  const result = parseDateInput(input, {
+    compactSixOrder: 'ddmmyy',
+    compactEightOrder: 'ddmmyyyy'
+  });
 
   if (!result.ok) {
     return result;

@@ -12,7 +12,11 @@ import type { Cents, DateInput } from './nz/types.js';
 import { parseNzAccount } from './nz/account.js';
 import { parseCents } from './nz/money.js';
 import {
+  createDirectDebitFile as createAnzDirectDebitFile,
   createDomesticExtendedFile,
+  type AnzDirectDebitFile,
+  type AnzDirectDebitFileError,
+  type AnzDirectDebitTransaction,
   type AnzDomesticExtendedFileError,
   type AnzDomesticExtendedTransaction
 } from './banks/anz/index.js';
@@ -41,28 +45,25 @@ import {
   type KiwibankTransaction
 } from './banks/kiwibank/index.js';
 import {
-  createPaymentCsvFile,
-  createPaymentFixedLengthFile,
+  createDirectCreditFile as createWestpacDirectCreditFile,
+  createDirectDebitFile as createWestpacDirectDebitFile,
+  type WestpacDirectDebitFile,
+  type WestpacDirectDebitTransaction,
   type WestpacPaymentFile,
   type WestpacPaymentFileError,
   type WestpacPaymentTransaction
 } from './banks/westpac/index.js';
 
 /** Supported banks for the portable outbound payment API. */
-export type PortablePaymentBank = 'anz' | 'asb' | 'bnz' | 'kiwibank' | 'westpac';
+export type PortablePaymentBank =
+  | 'anz'
+  | 'asb'
+  | 'bnz'
+  | 'kiwibank'
+  | 'westpac';
 
 /** Supported banks for the portable direct debit API. */
-export type PortableDebitBank = 'asb' | 'bnz' | 'kiwibank';
-
-/**
- * Westpac-specific render format selector.
- *
- * Use this only when `bank` is `westpac`.
- *
- * - `csv`: Westpac DeskBank-style CSV payment file.
- * - `fixed-length`: Westpac fixed-width payment file.
- */
-export type PortablePaymentRenderFormat = 'csv' | 'fixed-length';
+export type PortableDebitBank = 'anz' | 'asb' | 'bnz' | 'kiwibank' | 'westpac';
 
 /**
  * Portable payment category.
@@ -72,7 +73,8 @@ export type PortablePaymentRenderFormat = 'csv' | 'fixed-length';
  *
  * - ANZ: renders transaction code `52`
  * - ASB: renders transaction code `052`
- * - BNZ, Kiwibank, Westpac: currently treated the same as `standard`
+ * - BNZ and Kiwibank: currently treated the same as `standard`
+ * - Westpac: renders transaction code `52`
  */
 export type PortablePaymentCategory = 'standard' | 'salary-and-wages';
 
@@ -95,14 +97,14 @@ export type PortablePaymentParty = {
    * Human-readable party name.
    *
    * This is usually the payee or payer name visible to the counterparty.
-  * All supported banks use a name field.
-  *
-  * Portable-safe limit: 20 printable ASCII characters.
-  *
-  * - ANZ: maps to `otherPartyName` / `subscriberName`, rejects over-length values
-  * - ASB: maps to MT9 name fields, truncates to 20 characters
-  * - BNZ and Kiwibank: maps to `accountName`, truncates to 20 characters
-  * - Westpac: maps to `accountName`, rejects over-length values above 20 characters
+   * All supported banks use a name field.
+   *
+   * Portable-safe limit: 20 printable ASCII characters.
+   *
+   * - ANZ: maps to `otherPartyName` / `subscriberName`, rejects over-length values
+   * - ASB: maps to MT9 name fields, truncates to 20 characters
+   * - BNZ and Kiwibank: maps to `accountName`, truncates to 20 characters
+   * - Westpac: maps to `accountName`, rejects over-length values above 20 characters
    *
    * Example: `Jane Smith`
    */
@@ -112,12 +114,12 @@ export type PortablePaymentParty = {
    * Particulars or narrative line for the party.
    *
    * Commonly used for invoice references, payroll markers, or short statement text.
-  * Supported by all current portable payment banks.
-  *
-  * Portable-safe limit: 12 printable ASCII characters.
-  *
-  * - ANZ and Westpac reject over-length values
-  * - ASB, BNZ, and Kiwibank truncate to 12 characters
+   * Supported by all current portable payment banks.
+   *
+   * Portable-safe limit: 12 printable ASCII characters.
+   *
+   * - ANZ and Westpac reject over-length values
+   * - ASB, BNZ, and Kiwibank truncate to 12 characters
    *
    * Example: `PAY`
    */
@@ -132,11 +134,11 @@ export type PortablePaymentParty = {
    * - ASB: maps to the MT9 code field
    * - BNZ and Kiwibank: maps to the code field
    * - Westpac: only used as a fallback for `payeeAnalysis` when `analysis` is omitted
-  *
-  * Portable-safe limit: 12 printable ASCII characters.
-  *
-  * Westpac does not have a distinct portable `code` field. When `analysis` is absent,
-  * `code` is reused as `payeeAnalysis` and preflight validation reports an approximation warning.
+   *
+   * Portable-safe limit: 12 printable ASCII characters.
+   *
+   * Westpac does not have a distinct portable `code` field. When `analysis` is absent,
+   * `code` is reused as `payeeAnalysis` and preflight validation reports an approximation warning.
    *
    * Example: `MARCH`
    */
@@ -146,11 +148,11 @@ export type PortablePaymentParty = {
    * Free-text reference line for the party.
    *
    * This often carries a customer reference, invoice number, or payroll reference. It is not the
-  * same as `code` or `particulars`, and some banks ignore it for specific roles.
-  *
-  * Portable-safe limit: 12 printable ASCII characters.
-  *
-  * Westpac portable payments ignore `payee.reference` completely.
+   * same as `code` or `particulars`, and some banks ignore it for specific roles.
+   *
+   * Portable-safe limit: 12 printable ASCII characters.
+   *
+   * Westpac portable payments ignore `payee.reference` completely.
    *
    * Example: `SALARY`
    */
@@ -191,7 +193,7 @@ export type PortablePaymentPayer = {
    * Human-readable payer name.
    *
    * Used by ANZ and ASB. Ignored by BNZ, Kiwibank, and Westpac portable payment output.
-  * Keep this within 20 printable ASCII characters when supplied.
+   * Keep this within 20 printable ASCII characters when supplied.
    *
    * Example: `ACME PAYROLL`
    */
@@ -201,7 +203,7 @@ export type PortablePaymentPayer = {
    * Payer particulars line.
    *
    * Used by ANZ and ASB. Ignored by BNZ, Kiwibank, and Westpac portable payment output.
-  * Keep this within 12 printable ASCII characters when supplied.
+   * Keep this within 12 printable ASCII characters when supplied.
    */
   readonly particulars?: string;
 
@@ -209,8 +211,8 @@ export type PortablePaymentPayer = {
    * Payer code field.
    *
    * ASB maps this to the MT9 code field. Other portable payment adapters either ignore it or
-  * prefer `analysis` for their native equivalent.
-  * Keep this within 12 printable ASCII characters when supplied.
+   * prefer `analysis` for their native equivalent.
+   * Keep this within 12 printable ASCII characters when supplied.
    */
   readonly code?: string;
 
@@ -218,7 +220,7 @@ export type PortablePaymentPayer = {
    * Payer reference line.
    *
    * Used by ANZ, ASB, and Westpac. Ignored by BNZ and Kiwibank portable payment output.
-  * Keep this within 12 printable ASCII characters when supplied.
+   * Keep this within 12 printable ASCII characters when supplied.
    */
   readonly reference?: string;
 
@@ -311,82 +313,78 @@ type PortablePaymentFileConfigBase<TBank extends PortablePaymentBank> = {
  * `batchCreationDate` is ANZ-specific metadata used by the domestic extended header. When omitted,
  * it falls back to `paymentDate`, then the current date.
  */
-export type PortableAnzPaymentFileConfig = PortablePaymentFileConfigBase<'anz'> & {
-  /**
-   * ANZ domestic extended batch creation date.
-   *
-   * Use this when the upload batch creation day must differ from the due date. Ignored by other
-   * banks.
-   */
-  readonly batchCreationDate?: DateInput;
-  readonly batchReference?: never;
-  readonly westpacRenderFormat?: never;
-};
+export type PortableAnzPaymentFileConfig =
+  PortablePaymentFileConfigBase<'anz'> & {
+    /**
+     * ANZ domestic extended batch creation date.
+     *
+     * Use this when the upload batch creation day must differ from the due date. Ignored by other
+     * banks.
+     */
+    readonly batchCreationDate?: DateInput;
+    readonly batchReference?: never;
+    readonly westpacRenderFormat?: never;
+  };
 
 /** ASB portable payment configuration. */
-export type PortableAsbPaymentFileConfig = PortablePaymentFileConfigBase<'asb'> & {
-  readonly batchReference?: never;
-  readonly batchCreationDate?: never;
-  readonly westpacRenderFormat?: never;
-};
+export type PortableAsbPaymentFileConfig =
+  PortablePaymentFileConfigBase<'asb'> & {
+    readonly batchReference?: never;
+    readonly batchCreationDate?: never;
+    readonly westpacRenderFormat?: never;
+  };
 
 /**
  * BNZ portable payment configuration.
  *
  * `batchReference` maps to BNZ `userReference`.
  */
-export type PortableBnzPaymentFileConfig = PortablePaymentFileConfigBase<'bnz'> & {
-  /**
-   * Batch-level reference shown in BNZ output.
-   *
-   * Example: `MARCH2026`
-   */
-  readonly batchReference?: string;
-  readonly batchCreationDate?: never;
-  readonly westpacRenderFormat?: never;
-};
+export type PortableBnzPaymentFileConfig =
+  PortablePaymentFileConfigBase<'bnz'> & {
+    /**
+     * Batch-level reference shown in BNZ output.
+     *
+     * Example: `MARCH2026`
+     */
+    readonly batchReference?: string;
+    readonly batchCreationDate?: never;
+    readonly westpacRenderFormat?: never;
+  };
 
 /**
  * Kiwibank portable payment configuration.
  *
  * `batchReference` maps to the Kiwibank batch reference field.
  */
-export type PortableKiwibankPaymentFileConfig = PortablePaymentFileConfigBase<'kiwibank'> & {
-  /**
-   * Batch-level reference shown in Kiwibank output.
-   *
-   * Example: `MARCH2026`
-   */
-  readonly batchReference?: string;
-  readonly batchCreationDate?: never;
-  readonly westpacRenderFormat?: never;
-};
+export type PortableKiwibankPaymentFileConfig =
+  PortablePaymentFileConfigBase<'kiwibank'> & {
+    /**
+     * Batch-level reference shown in Kiwibank output.
+     *
+     * Example: `MARCH2026`
+     */
+    readonly batchReference?: string;
+    readonly batchCreationDate?: never;
+    readonly westpacRenderFormat?: never;
+  };
 
 /**
  * Westpac portable payment configuration.
  *
- * Westpac is the only portable payment bank with multiple render formats, so
- * `westpacRenderFormat` is intentionally available only on this branch of the config union.
+ * Westpac portable payments use the Business Online Deskbank CSV direct-credit layout.
  */
-export type PortableWestpacPaymentFileConfig = PortablePaymentFileConfigBase<'westpac'> & {
-  /**
-   * File-level reference used by Westpac header output.
-   *
-   * Example: `MARCH2026`
-   */
-  readonly batchReference?: string;
+export type PortableWestpacPaymentFileConfig =
+  PortablePaymentFileConfigBase<'westpac'> & {
+    /**
+     * File-level reference used by Westpac header output.
+     *
+     * Example: `MARCH2026`
+     */
+    readonly batchReference?: string;
 
-  /**
-   * Westpac output layout.
-   *
-   * - `csv`: comma-delimited payment upload
-   * - `fixed-length`: fixed-width payment upload
-   *
-   * Defaults to `csv` when omitted.
-   */
-  readonly westpacRenderFormat?: PortablePaymentRenderFormat;
-  readonly batchCreationDate?: never;
-};
+    readonly batchCreationDate?: never;
+    readonly westpacRenderFormat?: never;
+  };
 
 /**
  * Portable outbound payment file configuration.
@@ -420,6 +418,21 @@ type PortableDebitFileConfigBase<TBank extends PortableDebitBank> = {
    * the bank-specific wire format.
    */
   readonly collectionDate?: DateInput;
+};
+
+/**
+ * ANZ portable direct debit configuration.
+ *
+ * ANZ's MTS-style direct debit file carries due-date metadata but does not use a portable source
+ * account, registration id, contra record, or batch reference field.
+ */
+export type PortableAnzDebitFileConfig = PortableDebitFileConfigBase<'anz'> & {
+  /** Optional ANZ batch creation date for the header record. Defaults to `collectionDate`. */
+  readonly batchCreationDate?: DateInput;
+  readonly sourceAccount?: never;
+  readonly registrationId?: never;
+  readonly contra?: never;
+  readonly batchReference?: never;
 };
 
 /**
@@ -468,18 +481,33 @@ export type PortableBnzDebitFileConfig = PortableDebitFileConfigBase<'bnz'> & {
  *
  * `batchReference` maps to the Kiwibank batch reference field and is truncated to 12 characters.
  */
-export type PortableKiwibankDebitFileConfig = PortableDebitFileConfigBase<'kiwibank'> & {
-  /**
-   * NZ settlement account used to collect the debit batch.
-   *
-   * The account is validated against the bundled NZ bank table and bank checksum rules used by the
-   * Kiwibank adapter.
-   */
-  readonly sourceAccount: string;
+export type PortableKiwibankDebitFileConfig =
+  PortableDebitFileConfigBase<'kiwibank'> & {
+    /**
+     * NZ settlement account used to collect the debit batch.
+     *
+     * The account is validated against the bundled NZ bank table and bank checksum rules used by the
+     * Kiwibank adapter.
+     */
+    readonly sourceAccount: string;
 
-  /** Optional Kiwibank batch-level reference. Portable-safe limit: 12 printable ASCII characters. */
-  readonly batchReference?: string;
-};
+    /** Optional Kiwibank batch-level reference. Portable-safe limit: 12 printable ASCII characters. */
+    readonly batchReference?: string;
+  };
+
+/**
+ * Westpac portable direct debit configuration.
+ *
+ * `sourceAccount` is the collector account credited by each direct debit detail row.
+ */
+export type PortableWestpacDebitFileConfig =
+  PortableDebitFileConfigBase<'westpac'> & {
+    /** NZ settlement account credited by the direct-debit batch. */
+    readonly sourceAccount: string;
+
+    /** Optional Westpac file-level reference shown in the header description field. */
+    readonly batchReference?: string;
+  };
 
 /**
  * Portable outbound direct debit file configuration.
@@ -488,9 +516,11 @@ export type PortableKiwibankDebitFileConfig = PortableDebitFileConfigBase<'kiwib
  * as `registrationId` and `contra` only when they actually apply.
  */
 export type PortableDebitFileConfig =
+  | PortableAnzDebitFileConfig
   | PortableAsbDebitFileConfig
   | PortableBnzDebitFileConfig
-  | PortableKiwibankDebitFileConfig;
+  | PortableKiwibankDebitFileConfig
+  | PortableWestpacDebitFileConfig;
 
 /**
  * Neutral outbound payment transaction.
@@ -595,14 +625,16 @@ export type PortablePaymentFile = BatchFile<
 > & {
   readonly kind: 'portable-payment';
   readonly bank: PortablePaymentBank;
-  readonly westpacRenderFormat?: PortablePaymentRenderFormat;
   readonly toBuffer: (options?: RenderFileOptions) => Buffer;
   readonly toString: (options?: RenderFileOptions) => string;
 };
 
 export type PortableDebitFileError = PortablePaymentFileError;
 
-export type PortableDebitFile = BatchFile<PortableDebitTransaction, PortableDebitFileError> & {
+export type PortableDebitFile = BatchFile<
+  PortableDebitTransaction,
+  PortableDebitFileError
+> & {
   readonly kind: 'portable-debit';
   readonly bank: PortableDebitBank;
   readonly toBuffer: (options?: RenderFileOptions) => Buffer;
@@ -617,16 +649,22 @@ type UnderlyingPortablePaymentFile =
   | WestpacPaymentFile;
 
 type UnderlyingPortableDebitFile =
+  | AnzDirectDebitFile
   | AsbFile<AsbDirectDebitTransaction>
   | BnzFile
-  | KiwibankFile;
+  | KiwibankFile
+  | WestpacDirectDebitFile;
 
 function toAsbParty(party: PortablePaymentParty): AsbPartyDetails {
   return {
     name: party.name,
     code: party.code ?? party.analysis ?? '',
-    ...(party.reference !== undefined ? { alphaReference: party.reference } : {}),
-    ...(party.particulars !== undefined ? { particulars: party.particulars } : {})
+    ...(party.reference !== undefined
+      ? { alphaReference: party.reference }
+      : {}),
+    ...(party.particulars !== undefined
+      ? { particulars: party.particulars }
+      : {})
   };
 }
 
@@ -635,12 +673,18 @@ function toAsbOtherParty(
   defaultName: string
 ): AsbOtherPartyDetails {
   return {
-    ...(party?.name !== undefined || defaultName.length > 0 ? { name: party?.name ?? defaultName } : {}),
+    ...(party?.name !== undefined || defaultName.length > 0
+      ? { name: party?.name ?? defaultName }
+      : {}),
     ...(party?.code !== undefined || party?.analysis !== undefined
       ? { code: party.code ?? party.analysis }
       : {}),
-    ...(party?.reference !== undefined ? { alphaReference: party.reference } : {}),
-    ...(party?.particulars !== undefined ? { particulars: party.particulars } : {})
+    ...(party?.reference !== undefined
+      ? { alphaReference: party.reference }
+      : {}),
+    ...(party?.particulars !== undefined
+      ? { particulars: party.particulars }
+      : {})
   };
 }
 
@@ -651,7 +695,8 @@ function createUnderlyingPaymentFile(
     case 'anz':
       return createDomesticExtendedFile({
         batchDueDate: config.paymentDate ?? new Date(),
-        batchCreationDate: config.batchCreationDate ?? config.paymentDate ?? new Date()
+        batchCreationDate:
+          config.batchCreationDate ?? config.paymentDate ?? new Date()
       });
 
     case 'asb':
@@ -665,37 +710,51 @@ function createUnderlyingPaymentFile(
       return createBnzDirectCreditFile({
         fromAccount: config.sourceAccount,
         originatorName: config.originatorName,
-        ...(config.batchReference !== undefined ? { userReference: config.batchReference } : {}),
-        ...(config.paymentDate !== undefined ? { processDate: config.paymentDate } : {})
+        ...(config.batchReference !== undefined
+          ? { userReference: config.batchReference }
+          : {}),
+        ...(config.paymentDate !== undefined
+          ? { processDate: config.paymentDate }
+          : {})
       });
 
     case 'kiwibank':
       return createKiwibankDirectCreditFile({
         fromAccount: config.sourceAccount,
         originatorName: config.originatorName,
-        ...(config.batchReference !== undefined ? { batchReference: config.batchReference } : {}),
-        ...(config.paymentDate !== undefined ? { processDate: config.paymentDate } : {})
+        ...(config.batchReference !== undefined
+          ? { batchReference: config.batchReference }
+          : {}),
+        ...(config.paymentDate !== undefined
+          ? { processDate: config.paymentDate }
+          : {})
       });
 
     case 'westpac':
-      return (config.westpacRenderFormat ?? 'csv') === 'fixed-length'
-        ? createPaymentFixedLengthFile({
-            fromAccount: config.sourceAccount,
-            customerName: config.originatorName,
-            ...(config.batchReference !== undefined ? { fileReference: config.batchReference } : {}),
-            ...(config.paymentDate !== undefined ? { scheduledDate: config.paymentDate } : {})
-          })
-        : createPaymentCsvFile({
-            fromAccount: config.sourceAccount,
-            customerName: config.originatorName,
-            ...(config.batchReference !== undefined ? { fileReference: config.batchReference } : {}),
-            ...(config.paymentDate !== undefined ? { scheduledDate: config.paymentDate } : {})
-          });
+      return createWestpacDirectCreditFile({
+        fromAccount: config.sourceAccount,
+        customerName: config.originatorName,
+        ...(config.batchReference !== undefined
+          ? { fileReference: config.batchReference }
+          : {}),
+        ...(config.paymentDate !== undefined
+          ? { scheduledDate: config.paymentDate }
+          : {})
+      });
   }
 }
 
-function createUnderlyingDebitFile(config: PortableDebitFileConfig): UnderlyingPortableDebitFile {
+function createUnderlyingDebitFile(
+  config: PortableDebitFileConfig
+): UnderlyingPortableDebitFile {
   switch (config.bank) {
+    case 'anz':
+      return createAnzDirectDebitFile({
+        batchDueDate: config.collectionDate ?? new Date(),
+        batchCreationDate:
+          config.batchCreationDate ?? config.collectionDate ?? new Date()
+      });
+
     case 'asb':
       return createAsbDirectDebitFile({
         registrationId: config.registrationId,
@@ -705,7 +764,9 @@ function createUnderlyingDebitFile(config: PortableDebitFileConfig): UnderlyingP
           ? {
               contra: {
                 account: config.contra.account,
-                ...(config.contra.code !== undefined ? { code: config.contra.code } : {}),
+                ...(config.contra.code !== undefined
+                  ? { code: config.contra.code }
+                  : {}),
                 ...(config.contra.reference !== undefined
                   ? { alphaReference: config.contra.reference }
                   : {}),
@@ -724,16 +785,36 @@ function createUnderlyingDebitFile(config: PortableDebitFileConfig): UnderlyingP
       return createBnzDirectDebitFile({
         fromAccount: config.sourceAccount,
         originatorName: config.collectorName,
-        ...(config.batchReference !== undefined ? { userReference: config.batchReference } : {}),
-        ...(config.collectionDate !== undefined ? { processDate: config.collectionDate } : {})
+        ...(config.batchReference !== undefined
+          ? { userReference: config.batchReference }
+          : {}),
+        ...(config.collectionDate !== undefined
+          ? { processDate: config.collectionDate }
+          : {})
       });
 
     case 'kiwibank':
       return createKiwibankDirectDebitFile({
         fromAccount: config.sourceAccount,
         originatorName: config.collectorName,
-        ...(config.batchReference !== undefined ? { batchReference: config.batchReference } : {}),
-        ...(config.collectionDate !== undefined ? { processDate: config.collectionDate } : {})
+        ...(config.batchReference !== undefined
+          ? { batchReference: config.batchReference }
+          : {}),
+        ...(config.collectionDate !== undefined
+          ? { processDate: config.collectionDate }
+          : {})
+      });
+
+    case 'westpac':
+      return createWestpacDirectDebitFile({
+        toAccount: config.sourceAccount,
+        customerName: config.collectorName,
+        ...(config.batchReference !== undefined
+          ? { fileReference: config.batchReference }
+          : {}),
+        ...(config.collectionDate !== undefined
+          ? { scheduledDate: config.collectionDate }
+          : {})
       });
   }
 }
@@ -749,7 +830,9 @@ function addPortablePaymentTransaction(
       const anzTransaction = {
         toAccount: transaction.toAccount,
         amount: transaction.amount,
-        ...(transaction.category === 'salary-and-wages' ? { transactionCode: '52' } : {}),
+        ...(transaction.category === 'salary-and-wages'
+          ? { transactionCode: '52' }
+          : {}),
         otherPartyName: transaction.payee.name,
         ...(transaction.payee.reference !== undefined
           ? { otherPartyReference: transaction.payee.reference }
@@ -783,7 +866,9 @@ function addPortablePaymentTransaction(
       const asbTransaction = {
         toAccount: transaction.toAccount,
         amount: transaction.amount,
-        ...(transaction.category === 'salary-and-wages' ? { transactionCode: '052' } : {}),
+        ...(transaction.category === 'salary-and-wages'
+          ? { transactionCode: '052' }
+          : {}),
         ...(transaction.internalReference !== undefined
           ? { internalReference: transaction.internalReference }
           : {}),
@@ -803,7 +888,9 @@ function addPortablePaymentTransaction(
         ...(transaction.payee.particulars !== undefined
           ? { particulars: transaction.payee.particulars }
           : {}),
-        ...(transaction.payee.code !== undefined ? { code: transaction.payee.code } : {}),
+        ...(transaction.payee.code !== undefined
+          ? { code: transaction.payee.code }
+          : {}),
         ...(transaction.payee.reference !== undefined
           ? { reference: transaction.payee.reference }
           : {}),
@@ -824,7 +911,9 @@ function addPortablePaymentTransaction(
         ...(transaction.payee.particulars !== undefined
           ? { particulars: transaction.payee.particulars }
           : {}),
-        ...(transaction.payee.code !== undefined ? { code: transaction.payee.code } : {}),
+        ...(transaction.payee.code !== undefined
+          ? { code: transaction.payee.code }
+          : {}),
         ...(transaction.payee.reference !== undefined
           ? { reference: transaction.payee.reference }
           : {}),
@@ -842,11 +931,18 @@ function addPortablePaymentTransaction(
         toAccount: transaction.toAccount,
         amount: transaction.amount,
         accountName: transaction.payee.name,
+        ...(transaction.category === 'salary-and-wages'
+          ? { transactionCode: '52' as const }
+          : {}),
         ...(transaction.payer?.reference !== undefined
           ? { payerReference: transaction.payer.reference }
           : {}),
-        ...(transaction.payee.analysis !== undefined || transaction.payee.code !== undefined
-          ? { payeeAnalysis: transaction.payee.analysis ?? transaction.payee.code }
+        ...(transaction.payee.analysis !== undefined ||
+        transaction.payee.code !== undefined
+          ? {
+              payeeAnalysis:
+                transaction.payee.analysis ?? transaction.payee.code
+            }
           : {}),
         ...(transaction.payee.particulars !== undefined
           ? { payeeParticulars: transaction.payee.particulars }
@@ -864,6 +960,21 @@ function addPortableDebitTransaction(
   transaction: PortableDebitTransaction
 ) {
   switch (config.bank) {
+    case 'anz': {
+      const anzFile = file as AnzDirectDebitFile;
+      const collectorName = transaction.collector?.name ?? config.collectorName;
+      const customerReference =
+        transaction.payer.reference ?? transaction.payer.name;
+      const anzTransaction = {
+        fromAccount: transaction.fromAccount,
+        amount: transaction.amount,
+        organisationName: collectorName,
+        customerReference
+      } satisfies AnzDirectDebitTransaction;
+
+      return anzFile.addTransaction(anzTransaction);
+    }
+
     case 'asb': {
       const asbFile = file as AsbFile<AsbDirectDebitTransaction>;
       const asbTransaction = {
@@ -933,22 +1044,43 @@ function addPortableDebitTransaction(
 
       return kiwibankFile.addTransaction(kiwibankTransaction);
     }
+
+    case 'westpac': {
+      const westpacFile = file as WestpacDirectDebitFile;
+      const payerAnalysis =
+        transaction.payer.analysis ?? transaction.collector?.code;
+      const westpacTransaction = {
+        fromAccount: transaction.fromAccount,
+        amount: transaction.amount,
+        accountName: transaction.payer.name,
+        ...(transaction.payer.reference !== undefined
+          ? { payerReference: transaction.payer.reference }
+          : {}),
+        ...(payerAnalysis !== undefined ? { payerAnalysis } : {}),
+        ...(transaction.payer.particulars !== undefined
+          ? { payerParticulars: transaction.payer.particulars }
+          : {})
+      } satisfies WestpacDirectDebitTransaction;
+
+      return westpacFile.addTransaction(westpacTransaction);
+    }
   }
 }
 
-export function createPortablePaymentFile(config: PortablePaymentFileConfig): PortablePaymentFile {
+export function createPortablePaymentFile(
+  config: PortablePaymentFileConfig
+): PortablePaymentFile {
   const underlying = createUnderlyingPaymentFile(config);
 
   return {
     kind: 'portable-payment',
     bank: config.bank,
-    ...(config.bank === 'westpac'
-      ? { westpacRenderFormat: config.westpacRenderFormat ?? 'csv' }
-      : {}),
     addTransaction(transaction) {
-      return addPortablePaymentTransaction(config, underlying, transaction) as ReturnType<
-        PortablePaymentFile['addTransaction']
-      >;
+      return addPortablePaymentTransaction(
+        config,
+        underlying,
+        transaction
+      ) as ReturnType<PortablePaymentFile['addTransaction']>;
     },
     summary() {
       return underlying.summary();
@@ -962,16 +1094,20 @@ export function createPortablePaymentFile(config: PortablePaymentFileConfig): Po
   };
 }
 
-export function createPortableDebitFile(config: PortableDebitFileConfig): PortableDebitFile {
+export function createPortableDebitFile(
+  config: PortableDebitFileConfig
+): PortableDebitFile {
   const underlying = createUnderlyingDebitFile(config);
 
   return {
     kind: 'portable-debit',
     bank: config.bank,
     addTransaction(transaction) {
-      return addPortableDebitTransaction(config, underlying, transaction) as ReturnType<
-        PortableDebitFile['addTransaction']
-      >;
+      return addPortableDebitTransaction(
+        config,
+        underlying,
+        transaction
+      ) as ReturnType<PortableDebitFile['addTransaction']>;
     },
     summary() {
       return underlying.summary();
@@ -992,7 +1128,12 @@ export type PortablePaymentSourceError =
   | KiwibankFileError
   | WestpacPaymentFileError;
 
-export type PortableDebitSourceError = AsbFileError | BnzFileError | KiwibankFileError;
+export type PortableDebitSourceError =
+  | AnzDirectDebitFileError
+  | AsbFileError
+  | BnzFileError
+  | KiwibankFileError
+  | WestpacPaymentFileError;
 
 export type PortablePaymentValidationWarningCode =
   | 'PORTABLE_FIELD_APPROXIMATED'
@@ -1074,7 +1215,9 @@ const VALIDATION_SOURCE_ACCOUNTS: Record<PortablePaymentBank, string> = {
 
 const VALIDATION_ORIGINATOR_NAME = 'NZ BANK BATCH';
 
-function getValidationSuggestion(error: PortableExplainedBatchError): string | undefined {
+function getValidationSuggestion(
+  error: PortableExplainedBatchError
+): string | undefined {
   switch (error.code) {
     case 'NZ_ACCOUNT_FORMAT':
       return 'Use a standard NZ account such as 01-0123-0456789-00, or validate candidate accounts with parseNzAccount() before generating files.';
@@ -1104,7 +1247,9 @@ function getValidationSuggestion(error: PortableExplainedBatchError): string | u
   }
 }
 
-function explainNzBatchError(error: PortableExplainedBatchError): PortableValidationErrorExplanation {
+function explainNzBatchError(
+  error: PortableExplainedBatchError
+): PortableValidationErrorExplanation {
   const suggestion = getValidationSuggestion(error);
 
   return {
@@ -1179,11 +1324,19 @@ function inferConfigErrorPath(error: PortableExplainedBatchError): string {
     case 'FIELD_LENGTH': {
       const field = error.context?.field;
 
-      if (field === 'fileReference' || field === 'userReference' || field === 'batchReference') {
+      if (
+        field === 'fileReference' ||
+        field === 'userReference' ||
+        field === 'batchReference'
+      ) {
         return 'config.batchReference';
       }
 
-      if (field === 'customerName' || field === 'clientShortName' || field === 'originatorName') {
+      if (
+        field === 'customerName' ||
+        field === 'clientShortName' ||
+        field === 'originatorName'
+      ) {
         return 'config.originatorName';
       }
 
@@ -1237,8 +1390,7 @@ function createPortablePaymentValidationConfig(
         bank,
         sourceAccount: VALIDATION_SOURCE_ACCOUNTS[bank],
         originatorName: VALIDATION_ORIGINATOR_NAME,
-        paymentDate: '2026-03-23',
-        westpacRenderFormat: 'csv'
+        paymentDate: '2026-03-23'
       };
   }
 }
@@ -1286,7 +1438,12 @@ function collectPaymentCompatibilityWarnings(
     );
   };
 
-  if (transaction.category === 'salary-and-wages' && bank !== 'anz' && bank !== 'asb') {
+  if (
+    transaction.category === 'salary-and-wages' &&
+    bank !== 'anz' &&
+    bank !== 'asb' &&
+    bank !== 'westpac'
+  ) {
     warnIgnored(
       `${basePath}.category`,
       `Portable category "salary-and-wages" is currently ignored for ${bank} payment output.`,
@@ -1317,7 +1474,11 @@ function collectPaymentCompatibilityWarnings(
     case 'bnz':
     case 'kiwibank':
       if (transaction.payer?.name !== undefined) {
-        warnIgnored(`${basePath}.payer.name`, `payer.name is ignored by ${bank} portable payment output.`, { bank });
+        warnIgnored(
+          `${basePath}.payer.name`,
+          `payer.name is ignored by ${bank} portable payment output.`,
+          { bank }
+        );
       }
 
       if (transaction.payer?.particulars !== undefined) {
@@ -1329,7 +1490,11 @@ function collectPaymentCompatibilityWarnings(
       }
 
       if (transaction.payer?.code !== undefined) {
-        warnIgnored(`${basePath}.payer.code`, `payer.code is ignored by ${bank} portable payment output.`, { bank });
+        warnIgnored(
+          `${basePath}.payer.code`,
+          `payer.code is ignored by ${bank} portable payment output.`,
+          { bank }
+        );
       }
 
       if (transaction.payer?.reference !== undefined) {
@@ -1359,7 +1524,10 @@ function collectPaymentCompatibilityWarnings(
         );
       }
 
-      if (transaction.payee.code !== undefined && transaction.payee.analysis !== undefined) {
+      if (
+        transaction.payee.code !== undefined &&
+        transaction.payee.analysis !== undefined
+      ) {
         warnIgnored(
           `${basePath}.payee.code`,
           'payee.code is ignored when payee.analysis is also provided for Westpac portable payment output.',
@@ -1367,7 +1535,10 @@ function collectPaymentCompatibilityWarnings(
         );
       }
 
-      if (transaction.payee.code !== undefined && transaction.payee.analysis === undefined) {
+      if (
+        transaction.payee.code !== undefined &&
+        transaction.payee.analysis === undefined
+      ) {
         warnApprox(
           `${basePath}.payee.code`,
           'payee.code is reused as Westpac payeeAnalysis when payee.analysis is omitted.',
@@ -1376,7 +1547,11 @@ function collectPaymentCompatibilityWarnings(
       }
 
       if (transaction.payer?.name !== undefined) {
-        warnIgnored(`${basePath}.payer.name`, 'payer.name is ignored by Westpac portable payment output.', { bank });
+        warnIgnored(
+          `${basePath}.payer.name`,
+          'payer.name is ignored by Westpac portable payment output.',
+          { bank }
+        );
       }
 
       if (transaction.payer?.particulars !== undefined) {
@@ -1388,7 +1563,11 @@ function collectPaymentCompatibilityWarnings(
       }
 
       if (transaction.payer?.code !== undefined) {
-        warnIgnored(`${basePath}.payer.code`, 'payer.code is ignored by Westpac portable payment output.', { bank });
+        warnIgnored(
+          `${basePath}.payer.code`,
+          'payer.code is ignored by Westpac portable payment output.',
+          { bank }
+        );
       }
 
       if (transaction.payer?.analysis !== undefined) {
@@ -1402,7 +1581,10 @@ function collectPaymentCompatibilityWarnings(
       break;
 
     case 'asb':
-      if (transaction.payee.analysis !== undefined && transaction.payee.code === undefined) {
+      if (
+        transaction.payee.analysis !== undefined &&
+        transaction.payee.code === undefined
+      ) {
         warnApprox(
           `${basePath}.payee.analysis`,
           'payee.analysis is used as an ASB code fallback when payee.code is omitted.',
@@ -1410,7 +1592,10 @@ function collectPaymentCompatibilityWarnings(
         );
       }
 
-      if (transaction.payer?.analysis !== undefined && transaction.payer.code === undefined) {
+      if (
+        transaction.payer?.analysis !== undefined &&
+        transaction.payer.code === undefined
+      ) {
         warnApprox(
           `${basePath}.payer.analysis`,
           'payer.analysis is used as an ASB code fallback when payer.code is omitted.',
@@ -1480,30 +1665,51 @@ export function validatePortablePaymentTransaction(
   options: PortablePaymentTransactionValidationOptions
 ): PortablePaymentValidationResult {
   const errors: PortablePaymentValidationIssue[] = [];
-  const warnings = collectPaymentCompatibilityWarnings(options.bank, transaction, 'transaction');
+  const warnings = collectPaymentCompatibilityWarnings(
+    options.bank,
+    transaction,
+    'transaction'
+  );
 
   const accountResult = parseNzAccount(transaction.toAccount);
 
   if (!accountResult.ok) {
-    appendIssue(errors, issueFromError(accountResult.error, 'transaction.toAccount'));
+    appendIssue(
+      errors,
+      issueFromError(accountResult.error, 'transaction.toAccount')
+    );
   }
 
   const amountResult = parseCents(transaction.amount);
 
   if (!amountResult.ok) {
-    appendIssue(errors, issueFromError(amountResult.error, 'transaction.amount'));
+    appendIssue(
+      errors,
+      issueFromError(amountResult.error, 'transaction.amount')
+    );
   }
 
   try {
-    const file = createPortablePaymentFile(createPortablePaymentValidationConfig(options.bank));
+    const file = createPortablePaymentFile(
+      createPortablePaymentValidationConfig(options.bank)
+    );
     const result = file.addTransaction(transaction);
 
     if (!result.ok) {
-      appendIssue(errors, issueFromError(result.error, inferTransactionErrorPath(result.error, 'transaction')));
+      appendIssue(
+        errors,
+        issueFromError(
+          result.error,
+          inferTransactionErrorPath(result.error, 'transaction')
+        )
+      );
     }
   } catch (caught) {
     if (caught instanceof NzBatchError) {
-      appendIssue(errors, issueFromError(caught, inferTransactionErrorPath(caught, 'transaction')));
+      appendIssue(
+        errors,
+        issueFromError(caught, inferTransactionErrorPath(caught, 'transaction'))
+      );
     } else {
       throw caught;
     }
@@ -1538,7 +1744,11 @@ export function validatePortablePaymentBatch(
   input.transactions.forEach((transaction, index) => {
     const basePath = `transactions[${String(index)}]`;
 
-    for (const warning of collectPaymentCompatibilityWarnings(input.config.bank, transaction, basePath)) {
+    for (const warning of collectPaymentCompatibilityWarnings(
+      input.config.bank,
+      transaction,
+      basePath
+    )) {
       appendIssue(warnings, warning);
     }
 
@@ -1548,7 +1758,10 @@ export function validatePortablePaymentBatch(
       if (!result.ok) {
         appendIssue(
           errors,
-          issueFromError(result.error, inferTransactionErrorPath(result.error, basePath))
+          issueFromError(
+            result.error,
+            inferTransactionErrorPath(result.error, basePath)
+          )
         );
       }
 

@@ -91,39 +91,5 @@ function regenerateKiwibankFixtures() {
   writeFixture('test/fixtures/kiwibank-direct-debit.txt', debit.toString());
 }
 
-function regenerateReferenceFixture() {
-  const file = createKiwibankCredit({
-    fromAccount: '02-0001-1234567-00',
-    originatorName: 'Demo Foundation',
-    processDate: '260319'
-  });
-
-  const accounts = [
-    '01-0902-0068389-00',
-    '02-0001-0000001-00',
-    '06-1400-7654321-99',
-    '38-9000-7654321-00'
-  ];
-
-  for (let index = 1; index <= 384; index += 1) {
-    const serial = String(index).padStart(3, '0');
-    const sequence = String(index).padStart(4, '0');
-
-    file.addTransaction({
-      counterpartyAccount: accounts[(index - 1) % accounts.length],
-      amount: (100 + index * 1.37).toFixed(2),
-      accountName: `Provider ${serial}`.padEnd(20, ' '),
-      particulars: `SERVICE ${sequence}`.slice(0, 12),
-      code: `CLIENT-${serial}`.padEnd(12, ' ').slice(0, 12),
-      reference: `REF ${sequence}`.padEnd(12, ' ').slice(0, 12),
-      information:
-        index % 5 === 0 ? `NOTE ${sequence}`.padEnd(12, ' ').slice(0, 12) : ''
-    });
-  }
-
-  writeFixture('test/fixtures/gbf_ib4b_payment_260319.txt', file.toString());
-}
-
 regenerateBnzFixture();
 regenerateKiwibankFixtures();
-regenerateReferenceFixture();

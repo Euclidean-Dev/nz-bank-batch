@@ -1,36 +1,56 @@
 import { AdapterError, FieldError } from '../../shared/errors.js';
-import type { FixedWidthFieldInput } from '../../shared/fixed-width.js';
-import { renderFixedWidthRecord } from '../../shared/fixed-width.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
-import { ensureRenderedRecord, renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
+import { renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
 import { err, ok } from '../../shared/result.js';
-import { assertNzAccount, decomposeNzAccount, parseNzAccount } from '../../nz/account.js';
+import {
+  assertNzAccount,
+  decomposeNzAccount,
+  parseNzAccount
+} from '../../nz/account.js';
 import { assertDdMmYy } from '../../nz/date.js';
 import { computeBranchBaseHashTotal } from '../../nz/hash-total.js';
 import { parseCents, toCents } from '../../nz/money.js';
 import type { NzAccountNumber } from '../../nz/types.js';
 import type {
+  WestpacDirectCreditFile,
+  WestpacDirectCreditFileConfig,
+  WestpacDirectCreditTransaction,
+  WestpacDirectCreditTransactionCode,
+  WestpacDirectDebitFile,
+  WestpacDirectDebitFileConfig,
+  WestpacDirectDebitTransaction,
   WestpacPaymentFile,
-  WestpacPaymentFileConfig,
-  WestpacPaymentFormat,
-  WestpacPaymentTransaction
+  WestpacPaymentFileConfig
 } from './types.js';
 
 const ASCII_PRINTABLE = /^[ -~]*$/;
 const MAX_PAYMENT_CENTS = 999_999_999n;
 const HEADER_FIELD_WIDTHS = [1, 6, 2, 4, 30, 6, 20, 6, 105] as const;
-const DETAIL_FIELD_WIDTHS = [1, 6, 2, 4, 8, 4, 2, 2, 15, 20, 12, 12, 12, 2, 4, 8, 4, 20, 42] as const;
+const DETAIL_FIELD_WIDTHS = [
+  1, 6, 2, 4, 8, 4, 2, 2, 15, 20, 12, 12, 12, 2, 4, 8, 4, 20, 42
+] as const;
 const ORIGINATING_BANK = '03';
-const PAYMENT_TRANSACTION_CODE = '50';
-const PAYMENT_MTS_SOURCE = 'DC';
+const DIRECT_DEBIT_TRANSACTION_CODE = '00';
+const DIRECT_DEBIT_MTS_SOURCE = 'DD';
+const DIRECT_CREDIT_MTS_SOURCE = 'DC';
 
-type StoredTransaction = {
+type StoredDirectCreditTransaction = {
   readonly toAccount: NzAccountNumber;
   readonly amountCents: bigint;
   readonly accountName: string;
   readonly payerReference: string;
   readonly payeeAnalysis: string;
   readonly payeeParticulars: string;
+  readonly transactionCode: WestpacDirectCreditTransactionCode;
+};
+
+type StoredDirectDebitTransaction = {
+  readonly fromAccount: NzAccountNumber;
+  readonly amountCents: bigint;
+  readonly accountName: string;
+  readonly payerReference: string;
+  readonly payerAnalysis: string;
+  readonly payerParticulars: string;
 };
 
 function currentDdMmYy(): string {
@@ -45,10 +65,14 @@ function ensureAscii(name: string, value: string): string {
   const trimmed = value.trimEnd();
 
   if (!ASCII_PRINTABLE.test(trimmed)) {
-    throw new FieldError('FIELD_ASCII', `Field ${name} must contain printable ASCII only.`, {
-      field: name,
-      value
-    });
+    throw new FieldError(
+      'FIELD_ASCII',
+      `Field ${name} must contain printable ASCII only.`,
+      {
+        field: name,
+        value
+      }
+    );
   }
 
   return trimmed;
@@ -56,17 +80,25 @@ function ensureAscii(name: string, value: string): string {
 
 function ensureLength(name: string, value: string, maxLength: number): string {
   if (value.length > maxLength) {
-    throw new FieldError('FIELD_LENGTH', `Field ${name} exceeds max length ${String(maxLength)}.`, {
-      field: name,
-      value,
-      maxLength
-    });
+    throw new FieldError(
+      'FIELD_LENGTH',
+      `Field ${name} exceeds max length ${String(maxLength)}.`,
+      {
+        field: name,
+        value,
+        maxLength
+      }
+    );
   }
 
   return value;
 }
 
-function ensureRequiredAscii(name: string, value: string, maxLength: number): string {
+function ensureRequiredAscii(
+  name: string,
+  value: string,
+  maxLength: number
+): string {
   const prepared = ensureLength(name, ensureAscii(name, value), maxLength);
 
   if (prepared.length === 0) {
@@ -78,16 +110,24 @@ function ensureRequiredAscii(name: string, value: string, maxLength: number): st
   return prepared;
 }
 
-function ensureOptionalAscii(name: string, value: string | undefined, maxLength: number): string {
+function ensureOptionalAscii(
+  name: string,
+  value: string | undefined,
+  maxLength: number
+): string {
   return ensureLength(name, ensureAscii(name, value ?? ''), maxLength);
 }
 
 function ensureCsvField(name: string, value: string): string {
   if (value.includes(',') || value.includes('"')) {
-    throw new FieldError('FIELD_ASCII', `Field ${name} must not contain commas or double quotes.`, {
-      field: name,
-      value
-    });
+    throw new FieldError(
+      'FIELD_ASCII',
+      `Field ${name} must not contain commas or double quotes.`,
+      {
+        field: name,
+        value
+      }
+    );
   }
 
   return value;
@@ -97,51 +137,41 @@ function renderCsvRecord(fields: readonly string[]): string {
   return fields.join(',');
 }
 
-function formatCentsAmount(cents: bigint, width: number, field: string): string {
-  const formatted = cents.toString();
-
-  if (formatted.length > width) {
-    throw new FieldError('FIELD_LENGTH', `Field ${field} exceeds fixed width ${String(width)}.`, {
-      field,
-      value: formatted,
-      length: width
-    });
-  }
-
-  return formatted.padStart(width, '0');
-}
-
-function createFixedField(
-  name: string,
-  length: number,
-  value: string,
-  options?: {
-    readonly required?: boolean;
-    readonly align?: 'left' | 'right';
-    readonly pad?: string;
-  }
-): FixedWidthFieldInput {
-  return {
-    value,
-    spec: {
-      name,
-      length,
-      ...(options?.required !== undefined ? { required: options.required } : {}),
-      ...(options?.align !== undefined ? { align: options.align } : {}),
-      ...(options?.pad !== undefined ? { pad: options.pad } : {}),
-      allowedPattern: ASCII_PRINTABLE
-    }
-  };
-}
-
-function makeSummary(transactions: readonly StoredTransaction[]): BatchFileSummary {
-  const total = transactions.reduce((sum, transaction) => sum + transaction.amountCents, 0n);
+function makeSummary(
+  transactions: readonly {
+    readonly amountCents: bigint;
+  }[]
+): BatchFileSummary {
+  const total = transactions.reduce(
+    (sum, transaction) => sum + transaction.amountCents,
+    0n
+  );
 
   return {
     count: transactions.length,
     totalCents: toCents(total),
+    hashTotal: 0n
+  };
+}
+
+function makeDirectCreditSummary(
+  transactions: readonly StoredDirectCreditTransaction[]
+): BatchFileSummary {
+  return {
+    ...makeSummary(transactions),
     hashTotal: computeBranchBaseHashTotal(
       transactions.map((transaction) => transaction.toAccount)
+    )
+  };
+}
+
+function makeDirectDebitSummary(
+  transactions: readonly StoredDirectDebitTransaction[]
+): BatchFileSummary {
+  return {
+    ...makeSummary(transactions),
+    hashTotal: computeBranchBaseHashTotal(
+      transactions.map((transaction) => transaction.fromAccount)
     )
   };
 }
@@ -166,11 +196,11 @@ function renderHeaderCsv(config: {
   ]);
 }
 
-function renderTransactionCsv(config: {
+function renderDirectCreditTransactionCsv(config: {
   readonly fromAccount: NzAccountNumber;
   readonly payerName: string;
   readonly sequenceNumber: string;
-  readonly transaction: StoredTransaction;
+  readonly transaction: StoredDirectCreditTransaction;
 }): string {
   const toParts = decomposeNzAccount(config.transaction.toAccount);
   const fromParts = decomposeNzAccount(config.fromAccount);
@@ -182,8 +212,8 @@ function renderTransactionCsv(config: {
     ensureCsvField('payeeBranch', toParts.branch),
     ensureCsvField('payeeAccount', toParts.paddedBase),
     ensureCsvField('payeeSuffix', toParts.paddedSuffix),
-    ensureCsvField('transactionCode', PAYMENT_TRANSACTION_CODE),
-    ensureCsvField('mtsSource', PAYMENT_MTS_SOURCE),
+    ensureCsvField('transactionCode', config.transaction.transactionCode),
+    ensureCsvField('mtsSource', DIRECT_CREDIT_MTS_SOURCE),
     ensureCsvField('amount', config.transaction.amountCents.toString()),
     ensureCsvField('payeeName', config.transaction.accountName),
     ensureCsvField('payeeParticulars', config.transaction.payeeParticulars),
@@ -198,106 +228,39 @@ function renderTransactionCsv(config: {
   ]);
 }
 
-function renderHeaderFixed(config: {
-  readonly originatingBranch: string;
-  readonly customerName: string;
-  readonly fileReference: string;
-  readonly scheduledDate: string;
+function renderDirectDebitTransactionCsv(config: {
+  readonly toAccount: NzAccountNumber;
+  readonly collectorName: string;
   readonly sequenceNumber: string;
-}) {
-  return renderFixedWidthRecord([
-    createFixedField('recordType', HEADER_FIELD_WIDTHS[0], 'A', { required: true }),
-    createFixedField('sequenceNumber', HEADER_FIELD_WIDTHS[1], config.sequenceNumber, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('originatingBank', HEADER_FIELD_WIDTHS[2], ORIGINATING_BANK, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('originatingBranch', HEADER_FIELD_WIDTHS[3], config.originatingBranch, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('customerName', HEADER_FIELD_WIDTHS[4], config.customerName, { required: false }),
-    createFixedField('customerNumber', HEADER_FIELD_WIDTHS[5], ''),
-    createFixedField('description', HEADER_FIELD_WIDTHS[6], config.fileReference, { required: false }),
-    createFixedField('scheduledDate', HEADER_FIELD_WIDTHS[7], config.scheduledDate, { required: true }),
-    createFixedField('spare', HEADER_FIELD_WIDTHS[8], '')
+  readonly transaction: StoredDirectDebitTransaction;
+}): string {
+  const payerParts = decomposeNzAccount(config.transaction.fromAccount);
+  const collectorParts = decomposeNzAccount(config.toAccount);
+
+  return renderCsvRecord([
+    ensureCsvField('recordType', 'D'),
+    ensureCsvField('sequenceNumber', config.sequenceNumber),
+    ensureCsvField('payerBank', payerParts.bankId),
+    ensureCsvField('payerBranch', payerParts.branch),
+    ensureCsvField('payerAccount', payerParts.paddedBase),
+    ensureCsvField('payerSuffix', payerParts.paddedSuffix),
+    ensureCsvField('transactionCode', DIRECT_DEBIT_TRANSACTION_CODE),
+    ensureCsvField('mtsSource', DIRECT_DEBIT_MTS_SOURCE),
+    ensureCsvField('amount', config.transaction.amountCents.toString()),
+    ensureCsvField('payerName', config.transaction.accountName),
+    ensureCsvField('payerParticulars', config.transaction.payerParticulars),
+    ensureCsvField('payerAnalysis', config.transaction.payerAnalysis),
+    ensureCsvField('payerReference', config.transaction.payerReference),
+    ensureCsvField('collectorBank', collectorParts.bankId),
+    ensureCsvField('collectorBranch', collectorParts.branch),
+    ensureCsvField('collectorAccount', collectorParts.paddedBase),
+    ensureCsvField('collectorSuffix', collectorParts.paddedSuffix),
+    ensureCsvField('collectorName', config.collectorName),
+    ensureCsvField('spare', '')
   ]);
 }
 
-function renderTransactionFixed(config: {
-  readonly fromAccount: NzAccountNumber;
-  readonly payerName: string;
-  readonly sequenceNumber: string;
-  readonly transaction: StoredTransaction;
-}) {
-  const toParts = decomposeNzAccount(config.transaction.toAccount);
-  const fromParts = decomposeNzAccount(config.fromAccount);
-
-  return renderFixedWidthRecord([
-    createFixedField('recordType', DETAIL_FIELD_WIDTHS[0], 'D', { required: true }),
-    createFixedField('sequenceNumber', DETAIL_FIELD_WIDTHS[1], config.sequenceNumber, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('bankCode', DETAIL_FIELD_WIDTHS[2], toParts.bankId, { required: true, align: 'right', pad: '0' }),
-    createFixedField('branchCode', DETAIL_FIELD_WIDTHS[3], toParts.branch, { required: true, align: 'right', pad: '0' }),
-    createFixedField('accountNumber', DETAIL_FIELD_WIDTHS[4], toParts.paddedBase, { required: true, align: 'right', pad: '0' }),
-    createFixedField('accountSuffix', DETAIL_FIELD_WIDTHS[5], toParts.paddedSuffix, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('transactionCode', DETAIL_FIELD_WIDTHS[6], PAYMENT_TRANSACTION_CODE, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('mtsSource', DETAIL_FIELD_WIDTHS[7], PAYMENT_MTS_SOURCE, { required: true }),
-    createFixedField(
-      'paymentAmount',
-      DETAIL_FIELD_WIDTHS[8],
-      formatCentsAmount(config.transaction.amountCents, DETAIL_FIELD_WIDTHS[8], 'paymentAmount'),
-      { required: true, align: 'right', pad: '0' }
-    ),
-    createFixedField('payeeName', DETAIL_FIELD_WIDTHS[9], config.transaction.accountName, {
-      required: false
-    }),
-    createFixedField('payeeParticulars', DETAIL_FIELD_WIDTHS[10], config.transaction.payeeParticulars),
-    createFixedField('payeeAnalysis', DETAIL_FIELD_WIDTHS[11], config.transaction.payeeAnalysis),
-    createFixedField('payerReference', DETAIL_FIELD_WIDTHS[12], config.transaction.payerReference),
-    createFixedField('fundingBankCode', DETAIL_FIELD_WIDTHS[13], fromParts.bankId, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('fundingBranchCode', DETAIL_FIELD_WIDTHS[14], fromParts.branch, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('fundingAccountNumber', DETAIL_FIELD_WIDTHS[15], fromParts.paddedBase, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('fundingAccountSuffix', DETAIL_FIELD_WIDTHS[16], fromParts.paddedSuffix, {
-      required: true,
-      align: 'right',
-      pad: '0'
-    }),
-    createFixedField('payerName', DETAIL_FIELD_WIDTHS[17], config.payerName),
-    createFixedField('spare', DETAIL_FIELD_WIDTHS[18], '')
-  ]);
-}
-
-function validateConfig(config: WestpacPaymentFileConfig): {
+function validateDirectCreditConfig(config: WestpacDirectCreditFileConfig): {
   readonly fromAccount: NzAccountNumber;
   readonly originatingBranch: string;
   readonly customerName: string;
@@ -311,38 +274,81 @@ function validateConfig(config: WestpacPaymentFileConfig): {
     fromAccount,
     originatingBranch: fromParts.branch,
     customerName: normaliseUppercase(
-      ensureOptionalAscii('customerName', config.customerName, HEADER_FIELD_WIDTHS[4])
+      ensureOptionalAscii(
+        'customerName',
+        config.customerName,
+        HEADER_FIELD_WIDTHS[4]
+      )
     ),
     fileReference: normaliseUppercase(
-      ensureOptionalAscii('fileReference', config.fileReference, HEADER_FIELD_WIDTHS[6])
+      ensureOptionalAscii(
+        'fileReference',
+        config.fileReference,
+        HEADER_FIELD_WIDTHS[6]
+      )
     ),
     scheduledDate: assertDdMmYy(config.scheduledDate ?? currentDdMmYy())
   };
 }
 
-function createWestpacFile(
-  kind: WestpacPaymentFormat,
-  config: WestpacPaymentFileConfig
-): WestpacPaymentFile {
-  const normalised = validateConfig(config);
-  const transactions: StoredTransaction[] = [];
+function validateDirectDebitConfig(config: WestpacDirectDebitFileConfig): {
+  readonly toAccount: NzAccountNumber;
+  readonly originatingBranch: string;
+  readonly customerName: string;
+  readonly fileReference: string;
+  readonly scheduledDate: string;
+} {
+  const toAccount = assertNzAccount(config.toAccount);
+  const toParts = decomposeNzAccount(toAccount);
 
-  const validateRender = () => {
-    const header =
-      kind === 'payment-csv'
-        ? renderHeaderCsv({ ...normalised, sequenceNumber: '000001' })
-        : ensureRenderedRecord(renderHeaderFixed({ ...normalised, sequenceNumber: '000001' }));
-
-    if (header.length === 0) {
-      throw new AdapterError('ADAPTER_CONFIG', 'Westpac header could not be rendered.');
-    }
+  return {
+    toAccount,
+    originatingBranch: toParts.branch,
+    customerName: normaliseUppercase(
+      ensureOptionalAscii(
+        'customerName',
+        config.customerName,
+        HEADER_FIELD_WIDTHS[4]
+      )
+    ),
+    fileReference: normaliseUppercase(
+      ensureOptionalAscii(
+        'fileReference',
+        config.fileReference,
+        HEADER_FIELD_WIDTHS[6]
+      )
+    ),
+    scheduledDate: assertDdMmYy(config.scheduledDate ?? currentDdMmYy())
   };
+}
 
-  validateRender();
+function validateHeaderRender(config: {
+  readonly originatingBranch: string;
+  readonly customerName: string;
+  readonly fileReference: string;
+  readonly scheduledDate: string;
+}) {
+  const header = renderHeaderCsv({ ...config, sequenceNumber: '000001' });
 
-  const file: WestpacPaymentFile = {
-    kind,
-    addTransaction(transaction: WestpacPaymentTransaction) {
+  if (header.length === 0) {
+    throw new AdapterError(
+      'ADAPTER_CONFIG',
+      'Westpac header could not be rendered.'
+    );
+  }
+}
+
+export function createDirectCreditFile(
+  config: WestpacDirectCreditFileConfig
+): WestpacDirectCreditFile {
+  const normalised = validateDirectCreditConfig(config);
+  const transactions: StoredDirectCreditTransaction[] = [];
+
+  validateHeaderRender(normalised);
+
+  const file: WestpacDirectCreditFile = {
+    kind: 'direct-credit',
+    addTransaction(transaction: WestpacDirectCreditTransaction) {
       const toAccountResult = parseNzAccount(transaction.toAccount);
 
       if (!toAccountResult.ok) {
@@ -367,23 +373,150 @@ function createWestpacFile(
         );
       }
 
-      let stored: StoredTransaction;
+      let stored: StoredDirectCreditTransaction;
 
       try {
         stored = {
           toAccount: toAccountResult.value,
           amountCents,
-          accountName: ensureRequiredAscii('accountName', transaction.accountName, DETAIL_FIELD_WIDTHS[9]),
+          accountName: ensureRequiredAscii(
+            'accountName',
+            transaction.accountName,
+            DETAIL_FIELD_WIDTHS[9]
+          ),
           payerReference: normaliseUppercase(
-            ensureOptionalAscii('payerReference', transaction.payerReference, DETAIL_FIELD_WIDTHS[12])
+            ensureOptionalAscii(
+              'payerReference',
+              transaction.payerReference,
+              DETAIL_FIELD_WIDTHS[12]
+            )
           ),
           payeeAnalysis: normaliseUppercase(
-            ensureOptionalAscii('payeeAnalysis', transaction.payeeAnalysis, DETAIL_FIELD_WIDTHS[11])
+            ensureOptionalAscii(
+              'payeeAnalysis',
+              transaction.payeeAnalysis,
+              DETAIL_FIELD_WIDTHS[11]
+            )
           ),
           payeeParticulars: normaliseUppercase(
             ensureOptionalAscii(
               'payeeParticulars',
               transaction.payeeParticulars,
+              DETAIL_FIELD_WIDTHS[10]
+            )
+          ),
+          transactionCode: transaction.transactionCode ?? '50'
+        };
+      } catch (error) {
+        return err(error as AdapterError | FieldError);
+      }
+
+      try {
+        renderDirectCreditTransactionCsv({
+          fromAccount: normalised.fromAccount,
+          payerName: normalised.customerName,
+          sequenceNumber: '000002',
+          transaction: stored
+        });
+      } catch (error) {
+        return err(error as AdapterError | FieldError);
+      }
+
+      transactions.push(stored);
+      return ok(undefined);
+    },
+    summary() {
+      return makeDirectCreditSummary(transactions);
+    },
+    toBuffer(options?: RenderFileOptions) {
+      return Buffer.from(file.toString(options), 'utf8');
+    },
+    toString(options?: RenderFileOptions) {
+      const records = [
+        renderHeaderCsv({ ...normalised, sequenceNumber: '000001' }),
+        ...transactions.map((transaction, index) => {
+          const sequenceNumber = String(index + 2).padStart(6, '0');
+
+          return renderDirectCreditTransactionCsv({
+            fromAccount: normalised.fromAccount,
+            payerName: normalised.customerName,
+            sequenceNumber,
+            transaction
+          });
+        })
+      ];
+
+      return renderCsvFile(records, options);
+    }
+  };
+
+  return file;
+}
+
+export function createDirectDebitFile(
+  config: WestpacDirectDebitFileConfig
+): WestpacDirectDebitFile {
+  const normalised = validateDirectDebitConfig(config);
+  const transactions: StoredDirectDebitTransaction[] = [];
+
+  validateHeaderRender(normalised);
+
+  const file: WestpacDirectDebitFile = {
+    kind: 'direct-debit',
+    addTransaction(transaction: WestpacDirectDebitTransaction) {
+      const fromAccountResult = parseNzAccount(transaction.fromAccount);
+
+      if (!fromAccountResult.ok) {
+        return fromAccountResult;
+      }
+
+      const amountResult = parseCents(transaction.amount);
+
+      if (!amountResult.ok) {
+        return amountResult;
+      }
+
+      const amountCents = amountResult.value as bigint;
+
+      if (amountCents <= 0n || amountCents > MAX_PAYMENT_CENTS) {
+        return err(
+          new AdapterError(
+            'ADAPTER_TRANSACTION',
+            'Westpac EFT direct debit amount must be between 0.01 and 9,999,999.99 NZD.',
+            { amountCents }
+          )
+        );
+      }
+
+      let stored: StoredDirectDebitTransaction;
+
+      try {
+        stored = {
+          fromAccount: fromAccountResult.value,
+          amountCents,
+          accountName: ensureRequiredAscii(
+            'accountName',
+            transaction.accountName,
+            DETAIL_FIELD_WIDTHS[9]
+          ),
+          payerReference: normaliseUppercase(
+            ensureOptionalAscii(
+              'payerReference',
+              transaction.payerReference,
+              DETAIL_FIELD_WIDTHS[12]
+            )
+          ),
+          payerAnalysis: normaliseUppercase(
+            ensureOptionalAscii(
+              'payerAnalysis',
+              transaction.payerAnalysis,
+              DETAIL_FIELD_WIDTHS[11]
+            )
+          ),
+          payerParticulars: normaliseUppercase(
+            ensureOptionalAscii(
+              'payerParticulars',
+              transaction.payerParticulars,
               DETAIL_FIELD_WIDTHS[10]
             )
           )
@@ -393,25 +526,12 @@ function createWestpacFile(
       }
 
       try {
-        if (kind === 'payment-csv') {
-          renderTransactionCsv({
-            fromAccount: normalised.fromAccount,
-            payerName: normalised.customerName,
-            sequenceNumber: '000002',
-            transaction: stored
-          });
-        } else {
-          const rendered = renderTransactionFixed({
-            fromAccount: normalised.fromAccount,
-            payerName: normalised.customerName,
-            sequenceNumber: '000002',
-            transaction: stored
-          });
-
-          if (!rendered.ok) {
-            return err(rendered.error);
-          }
-        }
+        renderDirectDebitTransactionCsv({
+          toAccount: normalised.toAccount,
+          collectorName: normalised.customerName,
+          sequenceNumber: '000002',
+          transaction: stored
+        });
       } catch (error) {
         return err(error as AdapterError | FieldError);
       }
@@ -420,41 +540,25 @@ function createWestpacFile(
       return ok(undefined);
     },
     summary() {
-      return makeSummary(transactions);
+      return makeDirectDebitSummary(transactions);
     },
     toBuffer(options?: RenderFileOptions) {
       return Buffer.from(file.toString(options), 'utf8');
     },
     toString(options?: RenderFileOptions) {
-      const summary = file.summary();
       const records = [
-        kind === 'payment-csv'
-          ? renderHeaderCsv({ ...normalised, sequenceNumber: '000001' })
-          : ensureRenderedRecord(renderHeaderFixed({ ...normalised, sequenceNumber: '000001' })),
+        renderHeaderCsv({ ...normalised, sequenceNumber: '000001' }),
         ...transactions.map((transaction, index) => {
           const sequenceNumber = String(index + 2).padStart(6, '0');
 
-          if (kind === 'payment-csv') {
-            return renderTransactionCsv({
-              fromAccount: normalised.fromAccount,
-              payerName: normalised.customerName,
-              sequenceNumber,
-              transaction
-            });
-          }
-
-          return ensureRenderedRecord(
-            renderTransactionFixed({
-              fromAccount: normalised.fromAccount,
-              payerName: normalised.customerName,
-              sequenceNumber,
-              transaction
-            })
-          );
+          return renderDirectDebitTransactionCsv({
+            toAccount: normalised.toAccount,
+            collectorName: normalised.customerName,
+            sequenceNumber,
+            transaction
+          });
         })
       ];
-
-      void summary;
 
       return renderCsvFile(records, options);
     }
@@ -463,10 +567,8 @@ function createWestpacFile(
   return file;
 }
 
-export function createPaymentCsvFile(config: WestpacPaymentFileConfig): WestpacPaymentFile {
-  return createWestpacFile('payment-csv', config);
-}
-
-export function createPaymentFixedLengthFile(config: WestpacPaymentFileConfig): WestpacPaymentFile {
-  return createWestpacFile('payment-fixed-length', config);
+export function createPaymentCsvFile(
+  config: WestpacPaymentFileConfig
+): WestpacPaymentFile {
+  return createDirectCreditFile(config);
 }

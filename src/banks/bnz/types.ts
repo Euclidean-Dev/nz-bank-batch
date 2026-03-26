@@ -1,9 +1,20 @@
 import type { BatchFile } from '../../shared/batch-file.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
-import type { AdapterError, DateError, FieldError, MoneyError, NzAccountError } from '../../shared/errors.js';
+import type {
+  AdapterError,
+  DateError,
+  FieldError,
+  MoneyError,
+  NzAccountError
+} from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, DateInput, NzAccountNumber, YyMmDd } from '../../nz/types.js';
+import type {
+  Cents,
+  DateInput,
+  NzAccountNumber,
+  YyMmDd
+} from '../../nz/types.js';
 
 export type BnzFileType = 'direct-credit' | 'direct-debit';
 export type BnzTransactionCode = 'DC' | 'DD';
@@ -25,7 +36,12 @@ export type BnzTransaction = {
   readonly information?: string;
 };
 
-export type BnzFileError = AdapterError | DateError | FieldError | MoneyError | NzAccountError;
+export type BnzFileError =
+  | AdapterError
+  | DateError
+  | FieldError
+  | MoneyError
+  | NzAccountError;
 
 export type ParsedBnzTransaction = {
   readonly counterpartyAccount: NzAccountNumber;
@@ -58,4 +74,6 @@ export type BnzFile = BatchFile<BnzTransaction, BnzFileError> & {
   readonly toString: (options?: RenderFileOptions) => string;
 };
 
-export type ParseBnzFile = (input: string | Buffer) => Result<ParsedBnzFile, BnzParseError>;
+export type ParseBnzFile = (
+  input: string | Buffer
+) => Result<ParsedBnzFile, BnzParseError>;

@@ -23,7 +23,10 @@ function normaliseInput(input: string): {
     .split(/[-\s]+/)
     .filter((segment) => segment.length > 0);
 
-  if (segmented.length === 4 && segmented.every((segment) => /^\d+$/.test(segment))) {
+  if (
+    segmented.length === 4 &&
+    segmented.every((segment) => /^\d+$/.test(segment))
+  ) {
     return {
       bankId: segmented[0]!,
       branch: segmented[1]!,
@@ -120,27 +123,36 @@ export function parseNzAccount(
   const normalised = normaliseInput(input);
 
   if (!normalised) {
-    return fail('Account number must be 4-part NZ account input or 15/16/18 digits.', {
-      input
-    });
+    return fail(
+      'Account number must be 4-part NZ account input or 15/16/18 digits.',
+      {
+        input
+      }
+    );
   }
 
   const bankId = normalised.bankId.padStart(2, '0');
 
   if (!/^\d{2}$/.test(bankId) || !/^\d{4}$/.test(normalised.branch)) {
-    return fail('Bank and branch components must be 2 and 4 digits.', { input });
+    return fail('Bank and branch components must be 2 and 4 digits.', {
+      input
+    });
   }
 
   const base = normaliseBase(normalised.base);
   const suffix = normaliseSuffix(normalised.suffix);
 
   if (!base || !suffix) {
-    return fail('Base must be 7 digits and suffix must normalise to 2 or 3 digits.', {
-      input
-    });
+    return fail(
+      'Base must be 7 digits and suffix must normalise to 2 or 3 digits.',
+      {
+        input
+      }
+    );
   }
 
-  const canonicalDigits = `${bankId}${normalised.branch}${base}${suffix}` as NzAccountNumber;
+  const canonicalDigits =
+    `${bankId}${normalised.branch}${base}${suffix}` as NzAccountNumber;
   const parts = decomposeNzAccount(canonicalDigits);
 
   if (validateBankBranch) {
@@ -164,10 +176,7 @@ export function parseNzAccount(
       );
     }
 
-    if (
-      typeof branchResult === 'object' &&
-      !branchResult.ok
-    ) {
+    if (typeof branchResult === 'object' && !branchResult.ok) {
       return err(
         new NzAccountError('NZ_ACCOUNT_BRANCH', branchResult.message, {
           input,

@@ -46,10 +46,14 @@ export function prepareCsvField(
 
   if (stringValue.includes(',')) {
     return err(
-      new FieldError('FIELD_COMMA', `Field ${spec.name} must not contain commas.`, {
-        field: spec.name,
-        value: stringValue
-      })
+      new FieldError(
+        'FIELD_COMMA',
+        `Field ${spec.name} must not contain commas.`,
+        {
+          field: spec.name,
+          value: stringValue
+        }
+      )
     );
   }
 

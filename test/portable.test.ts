@@ -64,7 +64,7 @@ describe('Portable payment API', () => {
       }).ok
     ).toBe(true);
 
-    expect(file.toString()).toBe(readFixture('anz-domestic-extended.txt'));
+    expect(file.toString()).toBe(readFixture('anz-direct-credit-mts.txt'));
   });
 
   it('renders an ASB direct credit file from the neutral payment model', () => {
@@ -188,23 +188,13 @@ describe('Portable payment API', () => {
     expect(file.toString()).toBe(readFixture('kiwibank-direct-credit.txt'));
   });
 
-  it('renders Westpac CSV and fixed-length payment files from the neutral payment model', () => {
-    const csvFile = createPortablePaymentFile({
+  it('renders a Westpac direct credit CSV file from the neutral payment model', () => {
+    const file = createPortablePaymentFile({
       bank: 'westpac',
       sourceAccount: '01-0123-0456789-00',
       originatorName: 'ACME PAYROLL LTD',
       batchReference: 'MARCH2026',
-      paymentDate: '2026-03-23',
-      westpacRenderFormat: 'csv'
-    });
-
-    const fixedFile = createPortablePaymentFile({
-      bank: 'westpac',
-      sourceAccount: '01-0123-0456789-00',
-      originatorName: 'ACME PAYROLL LTD',
-      batchReference: 'MARCH2026',
-      paymentDate: '2026-03-23',
-      westpacRenderFormat: 'fixed-length'
+      paymentDate: '2026-03-23'
     });
 
     const transactions = [
@@ -235,16 +225,67 @@ describe('Portable payment API', () => {
     ] as const;
 
     for (const transaction of transactions) {
-      expect(csvFile.addTransaction(transaction).ok).toBe(true);
-      expect(fixedFile.addTransaction(transaction).ok).toBe(true);
+      expect(file.addTransaction(transaction).ok).toBe(true);
     }
 
-    expect(csvFile.toString()).toBe(readFixture('westpac-payment.csv'));
-    expect(fixedFile.toString()).toBe(readFixture('westpac-payment-fixed.txt'));
+    expect(file.toString()).toBe(readFixture('westpac-payment.csv'));
+  });
+
+  it('maps the portable salary-and-wages category to Westpac transaction code 52', () => {
+    const file = createPortablePaymentFile({
+      bank: 'westpac',
+      sourceAccount: '01-0123-0456789-00',
+      originatorName: 'ACME PAYROLL LTD',
+      paymentDate: '2026-03-23'
+    });
+
+    expect(
+      file.addTransaction({
+        toAccount: '12-3200-0123456-00',
+        amount: '12.50',
+        category: 'salary-and-wages',
+        payee: {
+          name: 'Jane Smith'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(file.toString()).toContain(',52,DC,1250,');
   });
 });
 
 describe('Portable direct debit API', () => {
+  it('renders an ANZ direct debit file from the neutral debit model', () => {
+    const file = createPortableDebitFile({
+      bank: 'anz',
+      collectorName: 'ACME RECEIPTS',
+      collectionDate: '2026-03-23',
+      batchCreationDate: '2026-03-23'
+    });
+
+    expect(
+      file.addTransaction({
+        fromAccount: '12-3200-0123456-00',
+        amount: '45.00',
+        payer: {
+          name: 'MEMBER001'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(
+      file.addTransaction({
+        fromAccount: '38-9000-1234567-02',
+        amount: '55.00',
+        payer: {
+          name: 'MEMBER002'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(file.toString()).toBe(readFixture('anz-direct-debit-mts.txt'));
+  });
+
   it('renders an ASB direct debit file from the neutral debit model', () => {
     const file = createPortableDebitFile({
       bank: 'asb',
@@ -322,6 +363,44 @@ describe('Portable direct debit API', () => {
 
     expect(file.toString()).toBe(readFixture('kiwibank-direct-debit.txt'));
   });
+
+  it('renders a Westpac direct debit CSV file from the neutral debit model', () => {
+    const file = createPortableDebitFile({
+      bank: 'westpac',
+      sourceAccount: '01-0123-0456789-00',
+      collectorName: 'ACME RECEIPTS LTD',
+      batchReference: 'MEMBERSHIP',
+      collectionDate: '2026-03-23'
+    });
+
+    expect(
+      file.addTransaction({
+        fromAccount: '12-3200-0123456-00',
+        amount: '45.00',
+        payer: {
+          name: 'Jane Smith',
+          particulars: 'MEMBER',
+          analysis: 'MARCH26',
+          reference: 'INV001'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(
+      file.addTransaction({
+        fromAccount: '38-9000-1234567-02',
+        amount: '55.00',
+        payer: {
+          name: 'John Taylor',
+          particulars: 'MEMBER',
+          analysis: 'MARCH26',
+          reference: 'INV002'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(file.toString()).toBe(readFixture('westpac-direct-debit.csv'));
+  });
 });
 
 describe('Portable payment validation helpers', () => {
@@ -330,8 +409,7 @@ describe('Portable payment validation helpers', () => {
       bank: 'westpac',
       sourceAccount: '18-3902-1002003-00',
       originatorName: 'ACME PAYROLL',
-      paymentDate: '2026-03-23',
-      westpacRenderFormat: 'csv'
+      paymentDate: '2026-03-23'
     });
 
     expect(result.ok).toBe(false);
@@ -368,10 +446,6 @@ describe('Portable payment validation helpers', () => {
     expect(result.errors).toEqual([]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          code: 'PORTABLE_FIELD_IGNORED',
-          path: 'transaction.category'
-        }),
         expect.objectContaining({
           code: 'PORTABLE_FIELD_IGNORED',
           path: 'transaction.internalReference'

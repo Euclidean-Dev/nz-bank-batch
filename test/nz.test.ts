@@ -95,27 +95,43 @@ describe('NZ primitives', () => {
 
   it('selects checksum algorithms for all supported rule families', () => {
     expect(
-      selectChecksumAlgorithm(decomposeNzAccount(assertNzAccount('01-0123-0456789-00')))
+      selectChecksumAlgorithm(
+        decomposeNzAccount(assertNzAccount('01-0123-0456789-00'))
+      )
     ).toBe('A');
     expect(
-      selectChecksumAlgorithm(decomposeNzAccount(assertNzAccount('08-6500-1234567-00')))
+      selectChecksumAlgorithm(
+        decomposeNzAccount(assertNzAccount('08-6500-1234567-00'))
+      )
     ).toBe('D');
     expect(
-      selectChecksumAlgorithm(decomposeNzAccount(assertNzAccount('09-0000-0000010-00')))
+      selectChecksumAlgorithm(
+        decomposeNzAccount(assertNzAccount('09-0000-0000010-00'))
+      )
     ).toBe('E');
     expect(
-      selectChecksumAlgorithm(decomposeNzAccount(assertNzAccount('25-2500-1234567-00')))
+      selectChecksumAlgorithm(
+        decomposeNzAccount(assertNzAccount('25-2500-1234567-00'))
+      )
     ).toBe('F');
     expect(
-      selectChecksumAlgorithm(decomposeNzAccount(assertNzAccount('26-2600-1234567-00')))
+      selectChecksumAlgorithm(
+        decomposeNzAccount(assertNzAccount('26-2600-1234567-00'))
+      )
     ).toBe('G');
     expect(
-      selectChecksumAlgorithm(decomposeNzAccount(assertNzAccount('31-2800-1234567-00')))
+      selectChecksumAlgorithm(
+        decomposeNzAccount(assertNzAccount('31-2800-1234567-00'))
+      )
     ).toBe('X');
   });
 
   it('uses the integrated bank checksum rule metadata', () => {
-    expect(selectNzChecksumRule(decomposeNzAccount(assertNzAccount('25-2500-1234567-00')))).toEqual({
+    expect(
+      selectNzChecksumRule(
+        decomposeNzAccount(assertNzAccount('25-2500-1234567-00'))
+      )
+    ).toEqual({
       algorithm: 'F',
       weightFactor: '000000017317310000',
       modulo: 10

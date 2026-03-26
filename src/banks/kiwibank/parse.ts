@@ -1,5 +1,8 @@
 import { ok, type Result } from '../../shared/result.js';
-import { parseIb4bFile, type ParsedIb4bFile } from '../../shared/ib4b-parser.js';
+import {
+  parseIb4bFile,
+  type ParsedIb4bFile
+} from '../../shared/ib4b-parser.js';
 import type { KiwibankParseError, ParsedKiwibankFile } from './types.js';
 
 function mapParsedFile(parsed: ParsedIb4bFile): ParsedKiwibankFile {

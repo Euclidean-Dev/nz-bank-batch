@@ -65,6 +65,6 @@ describe('BNZ adapter', () => {
     ).toBe(true);
 
     expect(file.transactionCode).toBe('DD');
-      expect(file.toString()).toBe(readFixture('bnz-direct-debit.txt'));
+    expect(file.toString()).toBe(readFixture('bnz-direct-debit.txt'));
   });
 });

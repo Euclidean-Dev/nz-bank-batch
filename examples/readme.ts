@@ -5,6 +5,10 @@ import {
   createDirectCreditFile as createKiwibankCreditFile,
   createDirectDebitFile as createKiwibankDebitFile
 } from 'nz-bank-batch/kiwibank';
+import {
+  createDirectCreditFile as createWestpacCreditFile,
+  createDirectDebitFile as createWestpacDebitFile
+} from 'nz-bank-batch/westpac';
 import { assertCents } from 'nz-bank-batch/nz';
 
 const cents = assertCents('12.50');
@@ -76,4 +80,30 @@ createKiwibankDebitFile({
   code: 'MAR',
   reference: 'DEBIT',
   information: ''
+});
+
+createWestpacCreditFile({
+  fromAccount: '01-0123-0456789-00',
+  customerName: 'ACME PAYROLL LTD',
+  scheduledDate: '230326'
+}).addTransaction({
+  toAccount: '12-3200-0123456-00',
+  amount: cents,
+  accountName: 'Jane Smith',
+  payerReference: 'PAY001',
+  payeeAnalysis: 'MARCH26',
+  payeeParticulars: 'SALARY'
+});
+
+createWestpacDebitFile({
+  toAccount: '01-0123-0456789-00',
+  customerName: 'ACME RECEIPTS LTD',
+  scheduledDate: '230326'
+}).addTransaction({
+  fromAccount: '12-3200-0123456-00',
+  amount: '45.00',
+  accountName: 'Gym Member',
+  payerReference: 'MEM001',
+  payerAnalysis: 'MARCH26',
+  payerParticulars: 'MEMBER'
 });
