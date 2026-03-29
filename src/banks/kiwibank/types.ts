@@ -12,6 +12,7 @@ import type { Result } from '../../shared/result.js';
 import type {
   Cents,
   DateInput,
+  KiwibankAccountInput,
   NzAccountNumber,
   YyMmDd
 } from '../../nz/types.js';
@@ -20,7 +21,7 @@ export type KiwibankFileType = 'direct-credit' | 'direct-debit';
 export type KiwibankTransactionCode = 'DC' | 'DD';
 
 export type KiwibankFileConfig = {
-  readonly fromAccount: string;
+  readonly fromAccount: KiwibankAccountInput;
   readonly originatorName: string;
   readonly batchReference?: string;
   readonly processDate?: DateInput | YyMmDd;

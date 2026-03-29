@@ -70,7 +70,7 @@ describe('Portable payment API', () => {
   it('renders an ASB direct credit file from the neutral payment model', () => {
     const file = createPortablePaymentFile({
       bank: 'asb',
-      sourceAccount: '01-0123-0456789-00',
+      sourceAccount: '12-3200-0456789-00',
       originatorName: 'ACME PAYROLL',
       paymentDate: '23-03-2026'
     });
@@ -188,10 +188,69 @@ describe('Portable payment API', () => {
     expect(file.toString()).toBe(readFixture('kiwibank-direct-credit.txt'));
   });
 
+  it('renders a TSB direct credit CSV file from the neutral payment model', () => {
+    const file = createPortablePaymentFile({
+      bank: 'tsb',
+      sourceAccount: '15-3900-1234567-00',
+      originatorName: 'TSB PAYMENTS',
+      paymentDate: '2026-03-23'
+    });
+
+    expect(
+      file.addTransaction({
+        toAccount: '12-3200-0123456-00',
+        amount: '102.45',
+        payee: {
+          name: 'Jane Smith',
+          particulars: 'SALARY',
+          code: 'MARCH',
+          reference: 'PAY001'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(
+      file.addTransaction({
+        toAccount: '15-3900-0000010-00',
+        amount: '88.01',
+        payee: {
+          name: 'Acme Ltd',
+          particulars: 'INV',
+          code: 'APR',
+          reference: 'REF02'
+        }
+      }).ok
+    ).toBe(true);
+
+    expect(file.toString()).toBe(
+      `${readFixture('tsb-direct-credit-portable.csv')}\r\n`
+    );
+  });
+
+  it('rejects TSB portable payments with commas in payee text', () => {
+    const file = createPortablePaymentFile({
+      bank: 'tsb',
+      sourceAccount: '15-3900-1234567-00',
+      originatorName: 'TSB PAYMENTS',
+      paymentDate: '2026-03-23'
+    });
+
+    const result = file.addTransaction({
+      toAccount: '15-3900-7654321-01',
+      amount: '10.00',
+      payee: {
+        name: 'Acme, Ltd',
+        particulars: 'PAY'
+      }
+    });
+
+    expect(result.ok).toBe(false);
+  });
+
   it('renders a Westpac direct credit CSV file from the neutral payment model', () => {
     const file = createPortablePaymentFile({
       bank: 'westpac',
-      sourceAccount: '01-0123-0456789-00',
+      sourceAccount: '03-1702-0456789-00',
       originatorName: 'ACME PAYROLL LTD',
       batchReference: 'MARCH2026',
       paymentDate: '2026-03-23'
@@ -234,7 +293,7 @@ describe('Portable payment API', () => {
   it('maps the portable salary-and-wages category to Westpac transaction code 52', () => {
     const file = createPortablePaymentFile({
       bank: 'westpac',
-      sourceAccount: '01-0123-0456789-00',
+      sourceAccount: '03-1702-0456789-00',
       originatorName: 'ACME PAYROLL LTD',
       paymentDate: '2026-03-23'
     });
@@ -258,8 +317,8 @@ describe('Portable direct debit API', () => {
   it('renders an ANZ direct debit file from the neutral debit model', () => {
     const file = createPortableDebitFile({
       bank: 'anz',
-      collectorName: 'ACME RECEIPTS',
-      collectionDate: '2026-03-23',
+      originatorName: 'ACME RECEIPTS',
+      paymentDate: '2026-03-23',
       batchCreationDate: '2026-03-23'
     });
 
@@ -289,11 +348,11 @@ describe('Portable direct debit API', () => {
   it('renders an ASB direct debit file from the neutral debit model', () => {
     const file = createPortableDebitFile({
       bank: 'asb',
-      collectorName: 'ACME RECEIPTS',
-      collectionDate: '2026-03-23',
+      originatorName: 'ACME RECEIPTS',
+      paymentDate: '2026-03-23',
       registrationId: '123456789012345',
       contra: {
-        account: '01-0123-0456789-00',
+        account: '12-3200-0456789-00',
         code: 'GYM',
         reference: 'MAR2026',
         particulars: 'MONTHLY'
@@ -341,9 +400,9 @@ describe('Portable direct debit API', () => {
     const file = createPortableDebitFile({
       bank: 'kiwibank',
       sourceAccount: '38-9000-7654321-00',
-      collectorName: 'KIWI CAFE',
+      originatorName: 'KIWI CAFE',
       batchReference: 'MEMBERS',
-      collectionDate: '2026-03-23'
+      paymentDate: '2026-03-23'
     });
 
     expect(
@@ -355,7 +414,7 @@ describe('Portable direct debit API', () => {
           particulars: 'MEMBERSHIP',
           reference: 'DEBIT'
         },
-        collector: {
+        originator: {
           code: 'MAR'
         }
       }).ok
@@ -367,10 +426,10 @@ describe('Portable direct debit API', () => {
   it('renders a Westpac direct debit CSV file from the neutral debit model', () => {
     const file = createPortableDebitFile({
       bank: 'westpac',
-      sourceAccount: '01-0123-0456789-00',
-      collectorName: 'ACME RECEIPTS LTD',
+      sourceAccount: '03-1702-0456789-00',
+      originatorName: 'ACME RECEIPTS LTD',
       batchReference: 'MEMBERSHIP',
-      collectionDate: '2026-03-23'
+      paymentDate: '2026-03-23'
     });
 
     expect(
@@ -401,13 +460,42 @@ describe('Portable direct debit API', () => {
 
     expect(file.toString()).toBe(readFixture('westpac-direct-debit.csv'));
   });
+
+  it('rejects portable direct debit config accounts that do not belong to the selected bank', () => {
+    const wrongWestpacAccount = '01-0123-0456789-00' as string;
+    const wrongAsbAccount = '01-0123-0456789-00' as string;
+
+    expect(() =>
+      createPortableDebitFile({
+        bank: 'westpac',
+        sourceAccount: wrongWestpacAccount,
+        originatorName: 'ACME RECEIPTS LTD',
+        paymentDate: '2026-03-23'
+      } as Parameters<typeof createPortableDebitFile>[0])
+    ).toThrowError(/expected bank 03/i);
+
+    expect(() =>
+      createPortableDebitFile({
+        bank: 'asb',
+        originatorName: 'ACME RECEIPTS',
+        paymentDate: '2026-03-23',
+        registrationId: '123456789012345',
+        contra: {
+          account: wrongAsbAccount,
+          code: 'GYM',
+          reference: 'MAR2026',
+          particulars: 'MONTHLY'
+        }
+      } as Parameters<typeof createPortableDebitFile>[0])
+    ).toThrowError(/expected bank 12/i);
+  });
 });
 
 describe('Portable payment validation helpers', () => {
   it('returns actionable config diagnostics with structured context', () => {
     const result = validatePortablePaymentFileConfig({
       bank: 'westpac',
-      sourceAccount: '18-3902-1002003-00',
+      sourceAccount: '03-3902-1002003-00',
       originatorName: 'ACME PAYROLL',
       paymentDate: '2026-03-23'
     });
@@ -418,6 +506,29 @@ describe('Portable payment validation helpers', () => {
     expect(result.errors[0]?.code).toBe('NZ_ACCOUNT_BRANCH');
     expect(result.errors[0]?.path).toBe('config.sourceAccount');
     expect(result.errors[0]?.suggestion).toContain('parseNzAccount()');
+  });
+
+  it('rejects portable payment config accounts that do not belong to the selected bank', () => {
+    const wrongWestpacAccount = '01-0123-0456789-00' as string;
+
+    expect(() =>
+      createPortablePaymentFile({
+        bank: 'westpac',
+        sourceAccount: wrongWestpacAccount,
+        originatorName: 'ACME PAYROLL LTD',
+        paymentDate: '2026-03-23'
+      } as Parameters<typeof createPortablePaymentFile>[0])
+    ).toThrowError(/expected bank 03/i);
+
+    const result = validatePortablePaymentFileConfig({
+      bank: 'westpac',
+      sourceAccount: wrongWestpacAccount,
+      originatorName: 'ACME PAYROLL LTD'
+    } as Parameters<typeof validatePortablePaymentFileConfig>[0]);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]?.code).toBe('NZ_ACCOUNT_BANK');
+    expect(result.errors[0]?.path).toBe('config.sourceAccount');
   });
 
   it('returns bank-compatibility warnings for ignored or approximate portable fields', () => {
@@ -470,14 +581,49 @@ describe('Portable payment validation helpers', () => {
     );
   });
 
+  it('returns TSB-specific ignored-field warnings for portable payment validation', () => {
+    const result = validatePortablePaymentTransaction(
+      {
+        toAccount: '15-3900-7654321-01',
+        amount: '12.50',
+        payee: {
+          name: 'Jane Smith',
+          particulars: 'SALARY',
+          analysis: 'IGNORED'
+        },
+        payer: {
+          name: 'ACME PAYROLL'
+        }
+      },
+      { bank: 'tsb' }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.payee.analysis'
+        }),
+        expect.objectContaining({
+          code: 'PORTABLE_FIELD_IGNORED',
+          path: 'transaction.payer.name'
+        })
+      ])
+    );
+  });
+
   it('aggregates config and transaction diagnostics across a batch', () => {
+    const wrongBnzSourceAccount = '18-3902-1002003-00' as string;
+
     const result = validatePortablePaymentBatch({
       config: {
         bank: 'bnz',
-        sourceAccount: '18-3902-1002003-00',
+        sourceAccount: wrongBnzSourceAccount,
         originatorName: 'BNZ EXPORTS',
         paymentDate: '2026-03-23'
-      },
+      } as Parameters<typeof validatePortablePaymentBatch>[0]['config'],
       transactions: [
         {
           toAccount: '18-3902-1002003-00',

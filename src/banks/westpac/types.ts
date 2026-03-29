@@ -8,12 +8,17 @@ import type {
 } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, DateInput, NzAccountNumber } from '../../nz/types.js';
+import type {
+  Cents,
+  DateInput,
+  NzAccountNumber,
+  WestpacAccountInput
+} from '../../nz/types.js';
 
 export type WestpacDirectCreditTransactionCode = '50' | '52';
 
 export type WestpacDirectCreditFileConfig = {
-  readonly fromAccount: string;
+  readonly fromAccount: WestpacAccountInput;
   readonly customerCode?: string;
   readonly customerName?: string;
   readonly fileReference?: string;
@@ -35,7 +40,7 @@ export type WestpacDirectCreditTransaction = {
 export type WestpacPaymentTransaction = WestpacDirectCreditTransaction;
 
 export type WestpacDirectDebitFileConfig = {
-  readonly toAccount: string;
+  readonly toAccount: WestpacAccountInput;
   readonly customerCode?: string;
   readonly customerName?: string;
   readonly fileReference?: string;

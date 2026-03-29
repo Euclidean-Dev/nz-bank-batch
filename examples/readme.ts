@@ -5,6 +5,7 @@ import {
   createDirectCreditFile as createKiwibankCreditFile,
   createDirectDebitFile as createKiwibankDebitFile
 } from 'nz-bank-batch/kiwibank';
+import { createDirectCreditFile as createTsbFile } from 'nz-bank-batch/tsb';
 import {
   createDirectCreditFile as createWestpacCreditFile,
   createDirectDebitFile as createWestpacDebitFile
@@ -22,13 +23,13 @@ createAnzDomesticExtendedFile({
 });
 
 createAsbFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '12-3200-0456789-00',
   dueDate: '20260323',
   clientShortName: 'ACME PAYROLL'
 }).toBuffer();
 
 createAsbFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '12-3200-0456789-00',
   dueDate: '20260323',
   clientShortName: 'ACME PAYROLL'
 }).addTransaction({
@@ -82,8 +83,22 @@ createKiwibankDebitFile({
   information: ''
 });
 
+createTsbFile({
+  fromAccount: '15-3900-1234567-00',
+  originatorName: 'TSB PAYMENTS',
+  dueDate: '2026-03-23',
+  batchNumber: 7
+}).addTransaction({
+  toAccount: '15-3900-7654321-01',
+  amount: '102.45',
+  accountName: 'Jane Smith',
+  particulars: 'SALARY',
+  code: 'MARCH',
+  reference: 'PAY001'
+});
+
 createWestpacCreditFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '03-1702-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   scheduledDate: '230326'
 }).addTransaction({
@@ -96,7 +111,7 @@ createWestpacCreditFile({
 });
 
 createWestpacDebitFile({
-  toAccount: '01-0123-0456789-00',
+  toAccount: '03-1702-0456789-00',
   customerName: 'ACME RECEIPTS LTD',
   scheduledDate: '230326'
 }).addTransaction({

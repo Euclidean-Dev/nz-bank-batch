@@ -1,6 +1,6 @@
 {
   "name": "nz-bank-batch",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "TypeScript library for generating New Zealand bank batch-payment upload files.",
   "keywords": [
     "new-zealand",
@@ -15,6 +15,7 @@
     "asb",
     "bnz",
     "kiwibank",
+    "tsb",
     "westpac",
     "mt9",
     "ib4b",
@@ -71,6 +72,20 @@
         "default": "./dist/portable.cjs"
       }
     },
+    "./node": {
+      "browser": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node-browser.js"
+      },
+      "import": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
+    },
     "./anz": {
       "import": {
         "types": "./dist/anz.d.ts",
@@ -109,6 +124,16 @@
       "require": {
         "types": "./dist/kiwibank.d.cts",
         "default": "./dist/kiwibank.cjs"
+      }
+    },
+    "./tsb": {
+      "import": {
+        "types": "./dist/tsb.d.ts",
+        "default": "./dist/tsb.js"
+      },
+      "require": {
+        "types": "./dist/tsb.d.cts",
+        "default": "./dist/tsb.cjs"
       }
     },
     "./westpac": {

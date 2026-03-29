@@ -13,7 +13,10 @@ export class NzBatchError<TCode extends string = string> extends Error {
 }
 
 export class NzAccountError extends NzBatchError<
-  'NZ_ACCOUNT_FORMAT' | 'NZ_ACCOUNT_CHECKSUM' | 'NZ_ACCOUNT_BRANCH'
+  | 'NZ_ACCOUNT_FORMAT'
+  | 'NZ_ACCOUNT_CHECKSUM'
+  | 'NZ_ACCOUNT_BRANCH'
+  | 'NZ_ACCOUNT_BANK'
 > {}
 
 export class MoneyError extends NzBatchError<

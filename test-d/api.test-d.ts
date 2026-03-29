@@ -2,6 +2,7 @@ import { expectAssignable, expectNotAssignable, expectType } from 'tsd';
 import type { Buffer } from 'node:buffer';
 
 import type { Result } from '../dist/index.js';
+import { writeBatchFile } from '../dist/node.js';
 import {
   compareParsedFileFixtures,
   compareParsedFiles
@@ -52,6 +53,11 @@ import {
   parseFile as parseKiwibankFile
 } from '../dist/kiwibank.js';
 import {
+  createDirectCreditFile as createTsbDirectCreditFile,
+  parseDirectCreditFile as parseTsbDirectCreditFile,
+  parseFile as parseTsbFile
+} from '../dist/tsb.js';
+import {
   createDirectCreditFile as createWestpacDirectCreditFile,
   createDirectDebitFile as createWestpacDirectDebitFile,
   createPaymentCsvFile,
@@ -79,13 +85,15 @@ expectType<DateInput>(inputDate);
 
 const portableFile = createPortablePaymentFile({
   bank: 'westpac',
-  sourceAccount: '01-0123-0456789-00',
+  sourceAccount: '03-1702-0456789-00',
   originatorName: 'ACME PAYROLL LTD',
   paymentDate: new Date(Date.UTC(2026, 2, 23))
 });
 expectType<PortablePaymentFile>(portableFile);
 expectAssignable<PortablePaymentCategory>('salary-and-wages');
 expectAssignable<PortablePaymentBank>('westpac');
+expectAssignable<PortablePaymentBank>('tsb');
+expectType<Promise<void>>(writeBatchFile('payments.txt', portableFile));
 expectType<Result<void, PortablePaymentFileError>>(
   portableFile.addTransaction({
     toAccount: '12-3200-0123456-00',
@@ -107,7 +115,7 @@ expectNotAssignable<PortablePaymentFileConfig>({
 
 expectNotAssignable<PortablePaymentFileConfig>({
   bank: 'westpac',
-  sourceAccount: '01-0123-0456789-00',
+  sourceAccount: '03-1702-0456789-00',
   originatorName: 'ACME PAYROLL LTD',
   westpacRenderFormat: 'csv'
 });
@@ -128,7 +136,7 @@ expectNotAssignable<PortablePaymentFileConfig>({
 
 const configValidation = validatePortablePaymentFileConfig({
   bank: 'westpac',
-  sourceAccount: '01-0123-0456789-00',
+  sourceAccount: '03-1702-0456789-00',
   originatorName: 'ACME PAYROLL LTD'
 });
 expectType<PortablePaymentValidationResult>(configValidation);
@@ -171,9 +179,16 @@ expectType<PortablePaymentValidationResult>(batchValidation);
 
 expectAssignable<PortableAnzDebitFileConfig>({
   bank: 'anz',
-  collectorName: 'ACME RECEIPTS',
-  collectionDate: '2026-03-23',
+  originatorName: 'ACME RECEIPTS',
+  paymentDate: '2026-03-23',
   batchCreationDate: '2026-03-23'
+});
+
+expectNotAssignable<PortableAnzDebitFileConfig>({
+  bank: 'anz',
+  originatorName: 'ACME RECEIPTS',
+  collectorName: 'ACME RECEIPTS',
+  paymentDate: '2026-03-23'
 });
 
 expectNotAssignable<PortableDebitFileConfig>({
@@ -182,11 +197,16 @@ expectNotAssignable<PortableDebitFileConfig>({
   sourceAccount: '01-0123-0456789-00'
 });
 
+expectNotAssignable<PortableDebitFileConfig>({
+  bank: 'tsb',
+  collectorName: 'TSB PAYMENTS'
+});
+
 const portableDebitFile = createPortableDebitFile({
   bank: 'westpac',
-  collectorName: 'ACME RECEIPTS',
-  sourceAccount: '01-0123-0456789-00',
-  collectionDate: new Date(Date.UTC(2026, 2, 23))
+  originatorName: 'ACME RECEIPTS',
+  sourceAccount: '03-1702-0456789-00',
+  paymentDate: new Date(Date.UTC(2026, 2, 23))
 });
 expectType<PortableDebitFile>(portableDebitFile);
 expectType<Result<void, PortableDebitFileError>>(
@@ -196,6 +216,9 @@ expectType<Result<void, PortableDebitFileError>>(
     payer: {
       name: 'Gym Member',
       reference: 'MEM001'
+    },
+    originator: {
+      code: 'MAR'
     }
   } as PortableDebitTransaction)
 );
@@ -281,13 +304,13 @@ if (parsedAnzDirectDebitFile.ok) {
 }
 
 createAsbCreditFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '12-3200-0456789-00',
   dueDate: '23-03-2026',
   clientShortName: 'ACME PAYROLL'
 }).toBuffer();
 
 createAsbCreditFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '12-3200-0456789-00',
   dueDate: new Date(Date.UTC(2026, 2, 23)),
   clientShortName: 'ACME PAYROLL'
 }).addTransaction({
@@ -305,7 +328,7 @@ createAsbDebitFile({
   dueDate: '2026-03-23',
   clientShortName: 'ACME RECEIPTS',
   contra: {
-    account: '01-0123-0456789-00',
+    account: '12-3200-0456789-00',
     code: 'GYM',
     alphaReference: 'MAR2026',
     particulars: 'MONTHLY'
@@ -374,8 +397,38 @@ if (parsedKiwibankFile.ok) {
   expectType<'DC' | 'DD'>(parsedKiwibankFile.value.transactionCode);
 }
 
+createTsbDirectCreditFile({
+  fromAccount: '15-3900-1234567-00',
+  originatorName: 'TSB PAYMENTS',
+  dueDate: '2026-03-23',
+  batchNumber: 7
+}).addTransaction({
+  toAccount: '15-3900-7654321-01',
+  amount: '102.45',
+  accountName: 'Jane Smith',
+  particulars: 'SALARY',
+  code: 'MARCH',
+  reference: 'PAY001'
+});
+
+const parsedTsbFile = parseTsbDirectCreditFile(
+  'A,0,230326,0007,052,15,3900,01234567,0000,0000,\r\nD,0,15,3900,07654321,0001,000000,00000010245,,,,0007,Jane Smith,SALARY,MARCH,PAY001,TSB PAYMENTS,0,,,,,,,\r\nT,0001,00000010245,0001,\r\n'
+);
+
+if (parsedTsbFile.ok) {
+  expectType<'direct-credit'>(parsedTsbFile.value.kind);
+}
+
+const parsedTsbAlias = parseTsbFile(
+  'A,0,230326,0007,052,15,3900,01234567,0000,0000,\r\nD,0,15,3900,07654321,0001,000000,00000010245,,,,0007,Jane Smith,SALARY,MARCH,PAY001,TSB PAYMENTS,0,,,,,,,\r\nT,0001,00000010245,0001,\r\n'
+);
+
+if (parsedTsbAlias.ok) {
+  expectType<'direct-credit'>(parsedTsbAlias.value.kind);
+}
+
 const westpacCreditFile = createWestpacDirectCreditFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '03-1702-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   fileReference: 'MARCH2026',
   scheduledDate: '23-03-2026'
@@ -383,8 +436,26 @@ const westpacCreditFile = createWestpacDirectCreditFile({
 
 expectType<Buffer>(westpacCreditFile.toBuffer());
 
+expectNotAssignable<PortablePaymentFileConfig>({
+  bank: 'westpac',
+  sourceAccount: '01-0123-0456789-00',
+  originatorName: 'ACME PAYROLL LTD'
+});
+
+expectNotAssignable<Parameters<typeof createWestpacDirectCreditFile>[0]>({
+  fromAccount: '01-0123-0456789-00',
+  customerName: 'ACME PAYROLL LTD',
+  scheduledDate: '23-03-2026'
+});
+
+expectNotAssignable<Parameters<typeof createAsbCreditFile>[0]>({
+  fromAccount: '01-0123-0456789-00',
+  dueDate: '23-03-2026',
+  clientShortName: 'ACME PAYROLL'
+});
+
 createWestpacDirectDebitFile({
-  toAccount: '01-0123-0456789-00',
+  toAccount: '03-1702-0456789-00',
   customerName: 'ACME RECEIPTS LTD',
   fileReference: 'MEMBERSHIP',
   scheduledDate: '23-03-2026'
@@ -424,7 +495,7 @@ if (parsedWestpacDirectDebitFile.ok) {
 }
 
 const westpacCsvFile = createPaymentCsvFile({
-  fromAccount: '01-0123-0456789-00',
+  fromAccount: '03-1702-0456789-00',
   customerName: 'ACME PAYROLL LTD',
   fileReference: 'MARCH2026',
   scheduledDate: '23-03-2026'

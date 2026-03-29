@@ -8,8 +8,17 @@ import {
   NzBatchError
 } from './shared/errors.js';
 import type { RenderFileOptions } from './shared/records.js';
-import type { Cents, DateInput } from './nz/types.js';
-import { parseNzAccount } from './nz/account.js';
+import type {
+  AnzAccountInput,
+  AsbAccountInput,
+  BnzAccountInput,
+  Cents,
+  DateInput,
+  KiwibankAccountInput,
+  TsbAccountInput,
+  WestpacAccountInput
+} from './nz/types.js';
+import { assertNzBankAccount, parseNzAccount } from './nz/account.js';
 import { parseCents } from './nz/money.js';
 import {
   createDirectDebitFile as createAnzDirectDebitFile,
@@ -45,6 +54,12 @@ import {
   type KiwibankTransaction
 } from './banks/kiwibank/index.js';
 import {
+  createDirectCreditFile as createTsbDirectCreditFile,
+  type TsbDirectCreditFile,
+  type TsbDirectCreditFileError,
+  type TsbDirectCreditTransaction
+} from './banks/tsb/index.js';
+import {
   createDirectCreditFile as createWestpacDirectCreditFile,
   createDirectDebitFile as createWestpacDirectDebitFile,
   type WestpacDirectDebitFile,
@@ -60,6 +75,7 @@ export type PortablePaymentBank =
   | 'asb'
   | 'bnz'
   | 'kiwibank'
+  | 'tsb'
   | 'westpac';
 
 /** Supported banks for the portable direct debit API. */
@@ -73,7 +89,7 @@ export type PortableDebitBank = 'anz' | 'asb' | 'bnz' | 'kiwibank' | 'westpac';
  *
  * - ANZ: renders transaction code `52`
  * - ASB: renders transaction code `052`
- * - BNZ and Kiwibank: currently treated the same as `standard`
+ * - BNZ, Kiwibank, and TSB: currently treated the same as `standard`
  * - Westpac: renders transaction code `52`
  */
 export type PortablePaymentCategory = 'standard' | 'salary-and-wages';
@@ -89,8 +105,8 @@ export type PortablePaymentCategory = 'standard' | 'salary-and-wages';
  * - keep `name` within 20 printable ASCII characters
  * - keep `particulars`, `code`, `reference`, and `analysis` within 12 printable ASCII characters
  *
- * ANZ and Westpac reject over-length text. ASB, BNZ, and Kiwibank truncate several native text
- * fields to fit their upload layouts.
+ * ANZ, TSB, and Westpac reject over-length text. ASB, BNZ, and Kiwibank truncate several native
+ * text fields to fit their upload layouts.
  */
 export type PortablePaymentParty = {
   /**
@@ -104,6 +120,7 @@ export type PortablePaymentParty = {
    * - ANZ: maps to `otherPartyName` / `subscriberName`, rejects over-length values
    * - ASB: maps to MT9 name fields, truncates to 20 characters
    * - BNZ and Kiwibank: maps to `accountName`, truncates to 20 characters
+  * - TSB: maps to the credit account name, rejects over-length values above 20 characters
    * - Westpac: maps to `accountName`, rejects over-length values above 20 characters
    *
    * Example: `Jane Smith`
@@ -119,7 +136,8 @@ export type PortablePaymentParty = {
    * Portable-safe limit: 12 printable ASCII characters.
    *
    * - ANZ and Westpac reject over-length values
-   * - ASB, BNZ, and Kiwibank truncate to 12 characters
+  * - TSB also rejects over-length values
+  * - ASB, BNZ, and Kiwibank truncate to 12 characters
    *
    * Example: `PAY`
    */
@@ -133,6 +151,7 @@ export type PortablePaymentParty = {
    * - ANZ: maps to the other-party alpha reference
    * - ASB: maps to the MT9 code field
    * - BNZ and Kiwibank: maps to the code field
+  * - TSB: maps to the part/code field
    * - Westpac: only used as a fallback for `payeeAnalysis` when `analysis` is omitted
    *
    * Portable-safe limit: 12 printable ASCII characters.
@@ -166,6 +185,7 @@ export type PortablePaymentParty = {
    * - ANZ: maps to the analysis code field
    * - ASB: falls back into the code field when `code` is omitted
    * - BNZ and Kiwibank: maps to the information field
+  * - TSB: ignored by the TSB portable mapping
    * - Westpac: maps to `payeeAnalysis`
    *
    * Portable-safe limit: 12 printable ASCII characters.
@@ -241,12 +261,88 @@ export type PortablePaymentPayer = {
 export type PortableDebitPayer = PortablePaymentParty;
 
 /**
- * Optional collector details attached to a portable direct debit transaction.
+ * Optional originator details attached to a portable direct debit transaction.
  *
  * ASB maps these fields to the debit `otherParty` block. BNZ and Kiwibank do not expose a full
  * second-party debit block, so only selected fields are reused as fallbacks.
  */
-export type PortableDebitCollector = PortablePaymentPayer;
+export type PortableDebitOriginator = PortablePaymentPayer;
+
+/**
+ * Backward-compatible alias for `PortableDebitOriginator`.
+ *
+ * `originator` is the preferred neutral naming because it aligns with portable payment file config
+ * fields such as `originatorName`.
+ */
+export type PortableDebitCollector = PortableDebitOriginator;
+
+type PortableDebitOriginatorNameFields =
+  | {
+      /**
+       * Originator or creditor name shown in the batch header where supported.
+       *
+       * This is the aligned portable-debit name and matches portable payment config.
+       */
+      readonly originatorName: string;
+      readonly collectorName?: never;
+    }
+  | {
+      /**
+       * Backward-compatible alias for `originatorName`.
+       *
+       * This remains supported for existing portable direct debit callers.
+       */
+      readonly collectorName: string;
+      readonly originatorName?: never;
+    };
+
+type PortableDebitDateFields =
+  | {
+      /**
+       * Requested debit or process date.
+       *
+       * This is the aligned portable-debit name and matches portable payment config.
+       */
+      readonly paymentDate: DateInput;
+      readonly collectionDate?: never;
+    }
+  | {
+      /**
+       * Backward-compatible alias for `paymentDate`.
+       *
+       * This remains supported for existing portable direct debit callers.
+       */
+      readonly collectionDate: DateInput;
+      readonly paymentDate?: never;
+    }
+  | {
+      readonly paymentDate?: never;
+      readonly collectionDate?: never;
+    };
+
+type PortableDebitOriginatorFields =
+  | {
+      /**
+       * Optional originator-side metadata.
+       *
+       * This is the aligned portable-debit name and mirrors the file-level `originatorName`.
+       */
+      readonly originator?: PortableDebitOriginator;
+      readonly collector?: never;
+    }
+  | {
+      /**
+       * Backward-compatible alias for `originator`.
+       *
+       * This remains supported for existing portable direct debit callers.
+       */
+      readonly collector?: PortableDebitCollector;
+      readonly originator?: never;
+    }
+  | {
+      readonly originator?: never;
+      readonly collector?: never;
+    };
 
 /**
  * ASB-only contra record configuration for portable direct debit files.
@@ -256,7 +352,7 @@ export type PortableDebitCollector = PortablePaymentPayer;
  */
 export type PortableDebitContra = {
   /** NZ account to receive the contra entry, for example `01-0123-0456789-00`. */
-  readonly account: string;
+  readonly account: AsbAccountInput;
 
   /**
    * Optional contra party name.
@@ -278,14 +374,6 @@ export type PortableDebitContra = {
 type PortablePaymentFileConfigBase<TBank extends PortablePaymentBank> = {
   /** Bank adapter to target from the neutral portable payment model. */
   readonly bank: TBank;
-
-  /**
-   * NZ source account in standard format, for example `01-0123-0456789-00`.
-   *
-   * The account is validated against the bundled NZ bank table and bank checksum rules used by the
-   * target adapter.
-   */
-  readonly sourceAccount: string;
 
   /**
    * Originator name or payer name shown in the file header where supported.
@@ -315,6 +403,9 @@ type PortablePaymentFileConfigBase<TBank extends PortablePaymentBank> = {
  */
 export type PortableAnzPaymentFileConfig =
   PortablePaymentFileConfigBase<'anz'> & {
+    /** ANZ-owned NZ source account such as `01-0123-0456789-00` or `06-1400-7654321-00`. */
+    readonly sourceAccount: AnzAccountInput;
+
     /**
      * ANZ domestic extended batch creation date.
      *
@@ -329,6 +420,9 @@ export type PortableAnzPaymentFileConfig =
 /** ASB portable payment configuration. */
 export type PortableAsbPaymentFileConfig =
   PortablePaymentFileConfigBase<'asb'> & {
+    /** ASB-owned NZ source account such as `12-3200-0456789-00`. */
+    readonly sourceAccount: AsbAccountInput;
+
     readonly batchReference?: never;
     readonly batchCreationDate?: never;
     readonly westpacRenderFormat?: never;
@@ -341,6 +435,9 @@ export type PortableAsbPaymentFileConfig =
  */
 export type PortableBnzPaymentFileConfig =
   PortablePaymentFileConfigBase<'bnz'> & {
+    /** BNZ-owned NZ source account such as `02-0001-0000001-00`. */
+    readonly sourceAccount: BnzAccountInput;
+
     /**
      * Batch-level reference shown in BNZ output.
      *
@@ -358,12 +455,26 @@ export type PortableBnzPaymentFileConfig =
  */
 export type PortableKiwibankPaymentFileConfig =
   PortablePaymentFileConfigBase<'kiwibank'> & {
+    /** Kiwibank-owned NZ source account such as `38-9000-7654321-00`. */
+    readonly sourceAccount: KiwibankAccountInput;
+
     /**
      * Batch-level reference shown in Kiwibank output.
      *
      * Example: `MARCH2026`
      */
     readonly batchReference?: string;
+    readonly batchCreationDate?: never;
+    readonly westpacRenderFormat?: never;
+  };
+
+/** TSB portable payment configuration. */
+export type PortableTsbPaymentFileConfig =
+  PortablePaymentFileConfigBase<'tsb'> & {
+    /** TSB-owned NZ source account such as `15-3900-1234567-00`. */
+    readonly sourceAccount: TsbAccountInput;
+
+    readonly batchReference?: never;
     readonly batchCreationDate?: never;
     readonly westpacRenderFormat?: never;
   };
@@ -375,6 +486,9 @@ export type PortableKiwibankPaymentFileConfig =
  */
 export type PortableWestpacPaymentFileConfig =
   PortablePaymentFileConfigBase<'westpac'> & {
+    /** Westpac-owned NZ source account such as `03-1702-0456789-00`. */
+    readonly sourceAccount: WestpacAccountInput;
+
     /**
      * File-level reference used by Westpac header output.
      *
@@ -397,28 +511,13 @@ export type PortablePaymentFileConfig =
   | PortableAsbPaymentFileConfig
   | PortableBnzPaymentFileConfig
   | PortableKiwibankPaymentFileConfig
+  | PortableTsbPaymentFileConfig
   | PortableWestpacPaymentFileConfig;
 
 type PortableDebitFileConfigBase<TBank extends PortableDebitBank> = {
   /** Bank adapter to target from the neutral portable direct debit model. */
   readonly bank: TBank;
-
-  /**
-   * Collector or creditor name shown in the batch header where supported.
-   *
-   * Portable-safe limit: 20 printable ASCII characters.
-   * ASB, BNZ, and Kiwibank all truncate this field to their native 20-character width.
-   */
-  readonly collectorName: string;
-
-  /**
-   * Requested collection or process date.
-   *
-   * Accepted as `Date`, `YYYY-MM-DD`, `DD-MM-YYYY`, `YYYYMMDD`, or `YYMMDD`, then normalised into
-   * the bank-specific wire format.
-   */
-  readonly collectionDate?: DateInput;
-};
+} & PortableDebitOriginatorNameFields & PortableDebitDateFields;
 
 /**
  * ANZ portable direct debit configuration.
@@ -427,7 +526,7 @@ type PortableDebitFileConfigBase<TBank extends PortableDebitBank> = {
  * account, registration id, contra record, or batch reference field.
  */
 export type PortableAnzDebitFileConfig = PortableDebitFileConfigBase<'anz'> & {
-  /** Optional ANZ batch creation date for the header record. Defaults to `collectionDate`. */
+  /** Optional ANZ batch creation date for the header record. Defaults to `paymentDate`. */
   readonly batchCreationDate?: DateInput;
   readonly sourceAccount?: never;
   readonly registrationId?: never;
@@ -470,7 +569,7 @@ export type PortableBnzDebitFileConfig = PortableDebitFileConfigBase<'bnz'> & {
    * The account is validated against the bundled NZ bank table and bank checksum rules used by the
    * BNZ adapter.
    */
-  readonly sourceAccount: string;
+  readonly sourceAccount: BnzAccountInput;
 
   /** Optional BNZ batch-level reference. Portable-safe limit: 12 printable ASCII characters. */
   readonly batchReference?: string;
@@ -489,7 +588,7 @@ export type PortableKiwibankDebitFileConfig =
      * The account is validated against the bundled NZ bank table and bank checksum rules used by the
      * Kiwibank adapter.
      */
-    readonly sourceAccount: string;
+    readonly sourceAccount: KiwibankAccountInput;
 
     /** Optional Kiwibank batch-level reference. Portable-safe limit: 12 printable ASCII characters. */
     readonly batchReference?: string;
@@ -503,7 +602,7 @@ export type PortableKiwibankDebitFileConfig =
 export type PortableWestpacDebitFileConfig =
   PortableDebitFileConfigBase<'westpac'> & {
     /** NZ settlement account credited by the direct-debit batch. */
-    readonly sourceAccount: string;
+    readonly sourceAccount: WestpacAccountInput;
 
     /** Optional Westpac file-level reference shown in the header description field. */
     readonly batchReference?: string;
@@ -609,8 +708,7 @@ export type PortableDebitTransaction = {
    * ASB maps this into the debit `otherParty` block. BNZ and Kiwibank reuse only a subset of these
    * fields when the payer-side portable data does not already provide them.
    */
-  readonly collector?: PortableDebitCollector;
-};
+} & PortableDebitOriginatorFields;
 
 export type PortablePaymentFileError =
   | AdapterError
@@ -646,6 +744,7 @@ type UnderlyingPortablePaymentFile =
   | AsbFile<AsbDirectCreditTransaction>
   | BnzFile
   | KiwibankFile
+  | TsbDirectCreditFile
   | WestpacPaymentFile;
 
 type UnderlyingPortableDebitFile =
@@ -688,9 +787,29 @@ function toAsbOtherParty(
   };
 }
 
+function getPortableDebitOriginatorName(config: PortableDebitFileConfig): string {
+  return 'originatorName' in config
+    ? config.originatorName
+    : config.collectorName;
+}
+
+function getPortableDebitPaymentDate(
+  config: PortableDebitFileConfig
+): DateInput | undefined {
+  return 'paymentDate' in config ? config.paymentDate : config.collectionDate;
+}
+
+function getPortableDebitOriginator(
+  transaction: PortableDebitTransaction
+): PortableDebitOriginator | undefined {
+  return 'originator' in transaction ? transaction.originator : transaction.collector;
+}
+
 function createUnderlyingPaymentFile(
   config: PortablePaymentFileConfig
 ): UnderlyingPortablePaymentFile {
+  assertPortableConfigSourceAccount(config);
+
   switch (config.bank) {
     case 'anz':
       return createDomesticExtendedFile({
@@ -730,6 +849,15 @@ function createUnderlyingPaymentFile(
           : {})
       });
 
+    case 'tsb':
+      return createTsbDirectCreditFile({
+        fromAccount: config.sourceAccount,
+        originatorName: config.originatorName,
+        ...(config.paymentDate !== undefined
+          ? { dueDate: config.paymentDate }
+          : {})
+      });
+
     case 'westpac':
       return createWestpacDirectCreditFile({
         fromAccount: config.sourceAccount,
@@ -747,19 +875,23 @@ function createUnderlyingPaymentFile(
 function createUnderlyingDebitFile(
   config: PortableDebitFileConfig
 ): UnderlyingPortableDebitFile {
+  assertPortableDebitConfigSourceAccount(config);
+  const originatorName = getPortableDebitOriginatorName(config);
+  const paymentDate = getPortableDebitPaymentDate(config);
+
   switch (config.bank) {
     case 'anz':
       return createAnzDirectDebitFile({
-        batchDueDate: config.collectionDate ?? new Date(),
+        batchDueDate: paymentDate ?? new Date(),
         batchCreationDate:
-          config.batchCreationDate ?? config.collectionDate ?? new Date()
+          config.batchCreationDate ?? paymentDate ?? new Date()
       });
 
     case 'asb':
       return createAsbDirectDebitFile({
         registrationId: config.registrationId,
-        dueDate: config.collectionDate ?? new Date(),
-        clientShortName: config.collectorName,
+        dueDate: paymentDate ?? new Date(),
+        clientShortName: originatorName,
         ...(config.contra !== undefined
           ? {
               contra: {
@@ -784,36 +916,36 @@ function createUnderlyingDebitFile(
     case 'bnz':
       return createBnzDirectDebitFile({
         fromAccount: config.sourceAccount,
-        originatorName: config.collectorName,
+        originatorName,
         ...(config.batchReference !== undefined
           ? { userReference: config.batchReference }
           : {}),
-        ...(config.collectionDate !== undefined
-          ? { processDate: config.collectionDate }
+        ...(paymentDate !== undefined
+          ? { processDate: paymentDate }
           : {})
       });
 
     case 'kiwibank':
       return createKiwibankDirectDebitFile({
         fromAccount: config.sourceAccount,
-        originatorName: config.collectorName,
+        originatorName,
         ...(config.batchReference !== undefined
           ? { batchReference: config.batchReference }
           : {}),
-        ...(config.collectionDate !== undefined
-          ? { processDate: config.collectionDate }
+        ...(paymentDate !== undefined
+          ? { processDate: paymentDate }
           : {})
       });
 
     case 'westpac':
       return createWestpacDirectDebitFile({
         toAccount: config.sourceAccount,
-        customerName: config.collectorName,
+        customerName: originatorName,
         ...(config.batchReference !== undefined
           ? { fileReference: config.batchReference }
           : {}),
-        ...(config.collectionDate !== undefined
-          ? { scheduledDate: config.collectionDate }
+        ...(paymentDate !== undefined
+          ? { scheduledDate: paymentDate }
           : {})
       });
   }
@@ -925,6 +1057,24 @@ function addPortablePaymentTransaction(
       return kiwibankFile.addTransaction(kiwibankTransaction);
     }
 
+    case 'tsb': {
+      const tsbFile = file as TsbDirectCreditFile;
+      const tsbTransaction = {
+        toAccount: transaction.toAccount,
+        amount: transaction.amount,
+        accountName: transaction.payee.name,
+        particulars: transaction.payee.particulars ?? '',
+        ...(transaction.payee.code !== undefined
+          ? { code: transaction.payee.code }
+          : {}),
+        ...(transaction.payee.reference !== undefined
+          ? { reference: transaction.payee.reference }
+          : {})
+      } satisfies TsbDirectCreditTransaction;
+
+      return tsbFile.addTransaction(tsbTransaction);
+    }
+
     case 'westpac': {
       const westpacFile = file as WestpacPaymentFile;
       const westpacTransaction = {
@@ -959,10 +1109,13 @@ function addPortableDebitTransaction(
   file: UnderlyingPortableDebitFile,
   transaction: PortableDebitTransaction
 ) {
+  const originator = getPortableDebitOriginator(transaction);
+
   switch (config.bank) {
     case 'anz': {
       const anzFile = file as AnzDirectDebitFile;
-      const collectorName = transaction.collector?.name ?? config.collectorName;
+      const collectorName =
+        originator?.name ?? getPortableDebitOriginatorName(config);
       const customerReference =
         transaction.payer.reference ?? transaction.payer.name;
       const anzTransaction = {
@@ -981,7 +1134,7 @@ function addPortableDebitTransaction(
         toAccount: transaction.fromAccount,
         amount: transaction.amount,
         thisParty: toAsbParty(transaction.payer),
-        otherParty: toAsbOtherParty(transaction.collector, '')
+        otherParty: toAsbOtherParty(originator, '')
       } satisfies AsbDirectDebitTransaction;
 
       return asbFile.addTransaction(asbTransaction);
@@ -995,18 +1148,18 @@ function addPortableDebitTransaction(
         accountName: transaction.payer.name,
         ...(transaction.payer.particulars !== undefined
           ? { particulars: transaction.payer.particulars }
-          : transaction.collector?.particulars !== undefined
-            ? { particulars: transaction.collector.particulars }
+          : originator?.particulars !== undefined
+            ? { particulars: originator.particulars }
             : {}),
-        ...(transaction.collector?.code !== undefined
-          ? { code: transaction.collector.code }
-          : transaction.collector?.analysis !== undefined
-            ? { code: transaction.collector.analysis }
+        ...(originator?.code !== undefined
+          ? { code: originator.code }
+          : originator?.analysis !== undefined
+            ? { code: originator.analysis }
             : {}),
         ...(transaction.payer.reference !== undefined
           ? { reference: transaction.payer.reference }
-          : transaction.collector?.reference !== undefined
-            ? { reference: transaction.collector.reference }
+          : originator?.reference !== undefined
+            ? { reference: originator.reference }
             : {}),
         ...(transaction.payer.analysis !== undefined
           ? { information: transaction.payer.analysis }
@@ -1024,18 +1177,18 @@ function addPortableDebitTransaction(
         accountName: transaction.payer.name,
         ...(transaction.payer.particulars !== undefined
           ? { particulars: transaction.payer.particulars }
-          : transaction.collector?.particulars !== undefined
-            ? { particulars: transaction.collector.particulars }
+          : originator?.particulars !== undefined
+            ? { particulars: originator.particulars }
             : {}),
-        ...(transaction.collector?.code !== undefined
-          ? { code: transaction.collector.code }
-          : transaction.collector?.analysis !== undefined
-            ? { code: transaction.collector.analysis }
+        ...(originator?.code !== undefined
+          ? { code: originator.code }
+          : originator?.analysis !== undefined
+            ? { code: originator.analysis }
             : {}),
         ...(transaction.payer.reference !== undefined
           ? { reference: transaction.payer.reference }
-          : transaction.collector?.reference !== undefined
-            ? { reference: transaction.collector.reference }
+          : originator?.reference !== undefined
+            ? { reference: originator.reference }
             : {}),
         ...(transaction.payer.analysis !== undefined
           ? { information: transaction.payer.analysis }
@@ -1048,7 +1201,7 @@ function addPortableDebitTransaction(
     case 'westpac': {
       const westpacFile = file as WestpacDirectDebitFile;
       const payerAnalysis =
-        transaction.payer.analysis ?? transaction.collector?.code;
+        transaction.payer.analysis ?? originator?.code;
       const westpacTransaction = {
         fromAccount: transaction.fromAccount,
         amount: transaction.amount,
@@ -1126,6 +1279,7 @@ export type PortablePaymentSourceError =
   | AsbFileError
   | BnzFileError
   | KiwibankFileError
+  | TsbDirectCreditFileError
   | WestpacPaymentFileError;
 
 export type PortableDebitSourceError =
@@ -1205,15 +1359,61 @@ type PortableExplainedBatchError = {
   readonly context: Record<string, unknown> | undefined;
 };
 
-const VALIDATION_SOURCE_ACCOUNTS: Record<PortablePaymentBank, string> = {
+const VALIDATION_SOURCE_ACCOUNTS = {
   anz: '01-0123-0456789-00',
-  asb: '01-0123-0456789-00',
+  asb: '12-3200-0456789-00',
   bnz: '02-0001-0000001-00',
   kiwibank: '38-9000-7654321-00',
-  westpac: '01-0123-0456789-00'
-};
+  tsb: '15-3900-1234567-00',
+  westpac: '03-1702-0456789-00'
+} as const;
 
 const VALIDATION_ORIGINATOR_NAME = 'NZ BANK BATCH';
+
+function assertPortableConfigSourceAccount(config: PortablePaymentFileConfig) {
+  switch (config.bank) {
+    case 'anz':
+      assertNzBankAccount(config.sourceAccount, ['01', '06'] as const);
+      return;
+    case 'asb':
+      assertNzBankAccount(config.sourceAccount, ['12'] as const);
+      return;
+    case 'bnz':
+      assertNzBankAccount(config.sourceAccount, ['02'] as const);
+      return;
+    case 'kiwibank':
+      assertNzBankAccount(config.sourceAccount, ['38'] as const);
+      return;
+    case 'tsb':
+      assertNzBankAccount(config.sourceAccount, ['15'] as const);
+      return;
+    case 'westpac':
+      assertNzBankAccount(config.sourceAccount, ['03'] as const);
+      return;
+  }
+}
+
+function assertPortableDebitConfigSourceAccount(config: PortableDebitFileConfig) {
+  switch (config.bank) {
+    case 'anz':
+      return;
+    case 'asb':
+      if (config.contra !== undefined) {
+        assertNzBankAccount(config.contra.account, ['12'] as const);
+      }
+
+      return;
+    case 'bnz':
+      assertNzBankAccount(config.sourceAccount, ['02'] as const);
+      return;
+    case 'kiwibank':
+      assertNzBankAccount(config.sourceAccount, ['38'] as const);
+      return;
+    case 'westpac':
+      assertNzBankAccount(config.sourceAccount, ['03'] as const);
+      return;
+  }
+}
 
 function getValidationSuggestion(
   error: PortableExplainedBatchError
@@ -1221,6 +1421,8 @@ function getValidationSuggestion(
   switch (error.code) {
     case 'NZ_ACCOUNT_FORMAT':
       return 'Use a standard NZ account such as 01-0123-0456789-00, or validate candidate accounts with parseNzAccount() before generating files.';
+    case 'NZ_ACCOUNT_BANK':
+      return 'Use an account number that belongs to the selected bank for this file config, or validate it first with parseNzBankAccount().';
     case 'NZ_ACCOUNT_BRANCH':
       return 'Validate candidate accounts with parseNzAccount() before generating files and confirm the bank and branch exist in the bundled NZ bank table.';
     case 'NZ_ACCOUNT_CHECKSUM':
@@ -1313,6 +1515,7 @@ function issueFromError(
 function inferConfigErrorPath(error: PortableExplainedBatchError): string {
   switch (error.code) {
     case 'NZ_ACCOUNT_FORMAT':
+    case 'NZ_ACCOUNT_BANK':
     case 'NZ_ACCOUNT_BRANCH':
     case 'NZ_ACCOUNT_CHECKSUM':
       return 'config.sourceAccount';
@@ -1353,6 +1556,7 @@ function inferTransactionErrorPath(
 ): string {
   switch (error.code) {
     case 'NZ_ACCOUNT_FORMAT':
+    case 'NZ_ACCOUNT_BANK':
     case 'NZ_ACCOUNT_BRANCH':
     case 'NZ_ACCOUNT_CHECKSUM':
       return `${basePath}.toAccount`;
@@ -1377,18 +1581,37 @@ function createPortablePaymentValidationConfig(
         batchCreationDate: '2026-03-23'
       };
     case 'asb':
+      return {
+        bank: 'asb',
+        sourceAccount: VALIDATION_SOURCE_ACCOUNTS.asb,
+        originatorName: VALIDATION_ORIGINATOR_NAME,
+        paymentDate: '2026-03-23'
+      };
     case 'bnz':
+      return {
+        bank: 'bnz',
+        sourceAccount: VALIDATION_SOURCE_ACCOUNTS.bnz,
+        originatorName: VALIDATION_ORIGINATOR_NAME,
+        paymentDate: '2026-03-23'
+      };
     case 'kiwibank':
       return {
-        bank,
-        sourceAccount: VALIDATION_SOURCE_ACCOUNTS[bank],
+        bank: 'kiwibank',
+        sourceAccount: VALIDATION_SOURCE_ACCOUNTS.kiwibank,
+        originatorName: VALIDATION_ORIGINATOR_NAME,
+        paymentDate: '2026-03-23'
+      };
+    case 'tsb':
+      return {
+        bank: 'tsb',
+        sourceAccount: VALIDATION_SOURCE_ACCOUNTS.tsb,
         originatorName: VALIDATION_ORIGINATOR_NAME,
         paymentDate: '2026-03-23'
       };
     case 'westpac':
       return {
-        bank,
-        sourceAccount: VALIDATION_SOURCE_ACCOUNTS[bank],
+        bank: 'westpac',
+        sourceAccount: VALIDATION_SOURCE_ACCOUNTS.westpac,
         originatorName: VALIDATION_ORIGINATOR_NAME,
         paymentDate: '2026-03-23'
       };
@@ -1473,6 +1696,7 @@ function collectPaymentCompatibilityWarnings(
 
     case 'bnz':
     case 'kiwibank':
+    case 'tsb':
       if (transaction.payer?.name !== undefined) {
         warnIgnored(
           `${basePath}.payer.name`,
@@ -1509,6 +1733,14 @@ function collectPaymentCompatibilityWarnings(
         warnIgnored(
           `${basePath}.payer.analysis`,
           `payer.analysis is ignored by ${bank} portable payment output.`,
+          { bank }
+        );
+      }
+
+      if (bank === 'tsb' && transaction.payee.analysis !== undefined) {
+        warnIgnored(
+          `${basePath}.payee.analysis`,
+          'payee.analysis is ignored by TSB portable payment output.',
           { bank }
         );
       }

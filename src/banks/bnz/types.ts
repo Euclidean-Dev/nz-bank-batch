@@ -10,6 +10,7 @@ import type {
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
 import type {
+  BnzAccountInput,
   Cents,
   DateInput,
   NzAccountNumber,
@@ -20,7 +21,7 @@ export type BnzFileType = 'direct-credit' | 'direct-debit';
 export type BnzTransactionCode = 'DC' | 'DD';
 
 export type BnzFileConfig = {
-  readonly fromAccount: string;
+  readonly fromAccount: BnzAccountInput;
   readonly originatorName: string;
   readonly userReference?: string;
   readonly processDate?: DateInput | YyMmDd;

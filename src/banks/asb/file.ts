@@ -3,7 +3,11 @@ import type { FixedWidthFieldInput } from '../../shared/fixed-width.js';
 import { renderFixedWidthRecord } from '../../shared/fixed-width.js';
 import { renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
 import { err, ok } from '../../shared/result.js';
-import { assertNzAccount, decomposeNzAccount, parseNzAccount } from '../../nz/account.js';
+import {
+  assertNzBankAccount,
+  decomposeNzAccount,
+  parseNzAccount
+} from '../../nz/account.js';
 import { assertYyMmDd, assertYyyyMmDd } from '../../nz/date.js';
 import { parseCents, toCents } from '../../nz/money.js';
 import type { BatchFileSummary } from '../../shared/batch-file.js';
@@ -324,7 +328,7 @@ function summarizeDirectDebit(
 export function createDirectCreditFile(
   config: AsbDirectCreditFileConfig
 ): AsbFile<AsbDirectCreditTransaction> {
-  const fromAccount = assertNzAccount(config.fromAccount);
+  const fromAccount = assertNzBankAccount(config.fromAccount, ['12'] as const);
   const dueDate = assertAsbDueDate(config.dueDate);
   const clientShortName = config.clientShortName ?? '';
   renderHeaderSuffix(fromAccount);
@@ -447,7 +451,7 @@ export function createDirectDebitFile(
   const contra = config.contra === undefined
     ? undefined
     : {
-        account: assertNzAccount(config.contra.account),
+        account: assertNzBankAccount(config.contra.account, ['12'] as const),
         code: config.contra.code ?? '',
         alphaReference: config.contra.alphaReference ?? '',
         particulars: config.contra.particulars ?? '',

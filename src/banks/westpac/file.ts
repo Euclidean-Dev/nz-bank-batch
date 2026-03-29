@@ -3,7 +3,7 @@ import type { BatchFileSummary } from '../../shared/batch-file.js';
 import { renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
 import { err, ok } from '../../shared/result.js';
 import {
-  assertNzAccount,
+  assertNzBankAccount,
   decomposeNzAccount,
   parseNzAccount
 } from '../../nz/account.js';
@@ -267,7 +267,7 @@ function validateDirectCreditConfig(config: WestpacDirectCreditFileConfig): {
   readonly fileReference: string;
   readonly scheduledDate: string;
 } {
-  const fromAccount = assertNzAccount(config.fromAccount);
+  const fromAccount = assertNzBankAccount(config.fromAccount, ['03'] as const);
   const fromParts = decomposeNzAccount(fromAccount);
 
   return {
@@ -298,7 +298,7 @@ function validateDirectDebitConfig(config: WestpacDirectDebitFileConfig): {
   readonly fileReference: string;
   readonly scheduledDate: string;
 } {
-  const toAccount = assertNzAccount(config.toAccount);
+  const toAccount = assertNzBankAccount(config.toAccount, ['03'] as const);
   const toParts = decomposeNzAccount(toAccount);
 
   return {

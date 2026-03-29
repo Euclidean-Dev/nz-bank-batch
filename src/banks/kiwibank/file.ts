@@ -1,7 +1,7 @@
 import { AdapterError, FieldError } from '../../shared/errors.js';
 import { renderCsvFile, type RenderFileOptions } from '../../shared/records.js';
 import { err, ok, type Result } from '../../shared/result.js';
-import { assertNzAccount, parseNzAccount } from '../../nz/account.js';
+import { assertNzBankAccount, parseNzAccount } from '../../nz/account.js';
 import { assertYyMmDd } from '../../nz/date.js';
 import { computeBranchBaseHashTotal } from '../../nz/hash-total.js';
 import { parseCents, toCents } from '../../nz/money.js';
@@ -247,7 +247,7 @@ function createKiwibankFile(
   kind: KiwibankFileType,
   config: KiwibankFileConfig
 ): KiwibankFile {
-  const fromAccount = assertNzAccount(config.fromAccount);
+  const fromAccount = assertNzBankAccount(config.fromAccount, ['38'] as const);
   const processDate = normaliseProcessDate(config.processDate);
   const batchReference = config.batchReference ?? '';
   const transactionCode: KiwibankTransactionCode =

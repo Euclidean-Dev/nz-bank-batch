@@ -16,7 +16,7 @@ function readFixture(name: string): string {
 describe('ASB adapter', () => {
   it('renders an MT9 direct credit file matching the golden fixture', () => {
     const file = createDirectCreditFile({
-      fromAccount: '01-0123-0456789-00',
+      fromAccount: '12-3200-0456789-00',
       dueDate: '23-03-2026',
       clientShortName: 'ACME PAYROLL'
     });
@@ -70,7 +70,7 @@ describe('ASB adapter', () => {
       dueDate: new Date(Date.UTC(2026, 2, 23)),
       clientShortName: 'ACME RECEIPTS',
       contra: {
-        account: '01-0123-0456789-00',
+        account: '12-3200-0456789-00',
         code: 'GYM',
         alphaReference: 'MAR2026',
         particulars: 'MONTHLY'
@@ -93,9 +93,39 @@ describe('ASB adapter', () => {
     expect(file.summary()).toEqual({
       count: 2,
       totalCents: 9000n,
-      hashTotal: 1240456790n
+      hashTotal: 32010456790n
     });
     expect(file.toString()).toBe(readFixture('asb-direct-debit.mt9'));
+  });
+
+  it('rejects config accounts that do not belong to ASB', () => {
+    const wrongAsbAccount = '01-0123-0456789-00' as string;
+
+    expect(() =>
+      createDirectCreditFile({
+        fromAccount: wrongAsbAccount,
+        dueDate: '23-03-2026',
+        clientShortName: 'ACME PAYROLL'
+      } as Parameters<typeof createDirectCreditFile>[0])
+    ).toThrowError(/expected bank 12/i);
+  });
+
+  it('rejects direct debit contra accounts that do not belong to ASB', () => {
+    const wrongAsbAccount = '01-0123-0456789-00' as string;
+
+    expect(() =>
+      createDirectDebitFile({
+        registrationId: '123456789012345',
+        dueDate: '23-03-2026',
+        clientShortName: 'ACME RECEIPTS',
+        contra: {
+          account: wrongAsbAccount,
+          code: 'GYM',
+          alphaReference: 'MAR2026',
+          particulars: 'MONTHLY'
+        }
+      } as Parameters<typeof createDirectDebitFile>[0])
+    ).toThrowError(/expected bank 12/i);
   });
 
   it('parses an MT9 direct credit fixture and reproduces it exactly', () => {

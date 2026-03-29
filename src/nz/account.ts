@@ -3,6 +3,7 @@ import { err, ok, type Result } from '../shared/result.js';
 import { validateNzBankBranch } from './banks.js';
 import { validateNzAccountChecksum } from './checksum.js';
 import type {
+  NzBankAccountNumber,
   NzAccountNumber,
   NzAccountParts,
   ParseNzAccountOptions
@@ -202,6 +203,53 @@ export function assertNzAccount(
   options?: ParseNzAccountOptions
 ): NzAccountNumber {
   const result = parseNzAccount(input, options);
+
+  if (!result.ok) {
+    throw result.error;
+  }
+
+  return result.value;
+}
+
+export function parseNzBankAccount<TBankId extends string>(
+  input: string,
+  expectedBankIds: readonly TBankId[] | TBankId,
+  options?: ParseNzAccountOptions
+) {
+  const result = parseNzAccount(input, options);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const allowedBankIds = Array.isArray(expectedBankIds)
+    ? expectedBankIds
+    : ([expectedBankIds] as readonly TBankId[]);
+  const parts = decomposeNzAccount(result.value);
+
+  if (!allowedBankIds.includes(parts.bankId as TBankId)) {
+    return err(
+      new NzAccountError(
+        'NZ_ACCOUNT_BANK',
+        `Account ${parts.canonicalDigits} failed validation: bank ${parts.bankId} does not match the expected bank ${allowedBankIds.join(' or ')}.`,
+        {
+          account: parts.canonicalDigits,
+          bankId: parts.bankId,
+          expectedBankIds: [...allowedBankIds]
+        }
+      )
+    );
+  }
+
+  return ok(result.value as NzBankAccountNumber<TBankId>);
+}
+
+export function assertNzBankAccount<TBankId extends string>(
+  input: string,
+  expectedBankIds: readonly TBankId[] | TBankId,
+  options?: ParseNzAccountOptions
+): NzBankAccountNumber<TBankId> {
+  const result = parseNzBankAccount(input, expectedBankIds, options);
 
   if (!result.ok) {
     throw result.error;

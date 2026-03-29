@@ -9,7 +9,14 @@ import type {
 } from '../../shared/errors.js';
 import type { RenderFileOptions } from '../../shared/records.js';
 import type { Result } from '../../shared/result.js';
-import type { Cents, DateInput, NzAccountNumber, YyMmDd, YyyyMmDd } from '../../nz/types.js';
+import type {
+  AsbAccountInput,
+  Cents,
+  DateInput,
+  NzAccountNumber,
+  YyMmDd,
+  YyyyMmDd
+} from '../../nz/types.js';
 
 export type AsbFileType = 'direct-credit' | 'direct-debit';
 export type AsbCreditTransactionCode = '051' | '052';
@@ -32,13 +39,13 @@ export type AsbOtherPartyDetails = {
 };
 
 export type AsbDirectCreditFileConfig = {
-  readonly fromAccount: string;
+  readonly fromAccount: AsbAccountInput;
   readonly dueDate: DateInput | AsbDueDate;
   readonly clientShortName?: string;
 };
 
 export type AsbDirectDebitContraConfig = {
-  readonly account: string;
+  readonly account: AsbAccountInput;
   readonly code?: string;
   readonly alphaReference?: string;
   readonly particulars?: string;

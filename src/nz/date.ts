@@ -275,3 +275,31 @@ export function assertDdMmYy(input: DateInput): string {
 
   return result.value;
 }
+
+export function parseDdMmYyyy(input: DateInput): Result<string, DateError> {
+  const result = parseDateInput(input, {
+    compactSixOrder: 'ddmmyy',
+    compactEightOrder: 'ddmmyyyy'
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const parts = result.value;
+  const day = String(parts.day).padStart(2, '0');
+  const month = String(parts.month).padStart(2, '0');
+  const year = String(parts.year).padStart(4, '0');
+
+  return ok(`${day}${month}${year}`);
+}
+
+export function assertDdMmYyyy(input: DateInput): string {
+  const result = parseDdMmYyyy(input);
+
+  if (!result.ok) {
+    throw result.error;
+  }
+
+  return result.value;
+}

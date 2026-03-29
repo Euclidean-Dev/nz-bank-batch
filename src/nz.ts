@@ -1,7 +1,9 @@
 export {
+  assertNzBankAccount,
   assertNzAccount,
   decomposeNzAccount,
   formatNzAccount,
+  parseNzBankAccount,
   parseNzAccount
 } from './nz/account.js';
 export {
@@ -12,9 +14,11 @@ export {
   validateNzBankBranch
 } from './nz/banks.js';
 export {
+  assertDdMmYyyy,
   assertDdMmYy,
   assertYyMmDd,
   assertYyyyMmDd,
+  parseDdMmYyyy,
   parseDdMmYy,
   parseYyMmDd,
   parseYyyyMmDd
@@ -26,9 +30,19 @@ export {
   validateNzAccountChecksum
 } from './nz/checksum.js';
 export type {
+  AnzAccountInput,
+  AnzBankId,
+  AsbAccountInput,
+  AsbBankId,
+  BnzAccountInput,
+  BnzBankId,
   BranchValidationHook,
   Cents,
   DateInput,
+  KiwibankAccountInput,
+  KiwibankBankId,
+  NzBankAccountInput,
+  NzBankAccountNumber,
   NzBankBranchRange,
   NzBankDefinition,
   NzAccountNumber,
@@ -36,6 +50,10 @@ export type {
   NzChecksumAlgorithm,
   NzChecksumRule,
   ParseNzAccountOptions,
+  TsbAccountInput,
+  TsbBankId,
+  WestpacAccountInput,
+  WestpacBankId,
   YyMmDd,
   YyyyMmDd
 } from './nz/types.js';

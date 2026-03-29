@@ -19,7 +19,7 @@ function readFixture(name: string): string {
 describe('Westpac adapter', () => {
   it('renders a Deskbank direct credit CSV file matching the documented field order', () => {
     const file = createDirectCreditFile({
-      fromAccount: '01-0123-0456789-00',
+      fromAccount: '03-1702-0456789-00',
       customerName: 'ACME PAYROLL LTD',
       fileReference: 'MARCH2026',
       scheduledDate: '2026-03-23'
@@ -59,7 +59,7 @@ describe('Westpac adapter', () => {
 
   it('renders a Deskbank direct debit CSV file matching the documented field order', () => {
     const file = createDirectDebitFile({
-      toAccount: '01-0123-0456789-00',
+      toAccount: '03-1702-0456789-00',
       customerName: 'ACME RECEIPTS LTD',
       fileReference: 'MEMBERSHIP',
       scheduledDate: new Date(Date.UTC(2026, 2, 23))
@@ -98,7 +98,7 @@ describe('Westpac adapter', () => {
 
   it('keeps the payment CSV alias working for direct credit output', () => {
     const file = createPaymentCsvFile({
-      fromAccount: '01-0123-0456789-00',
+      fromAccount: '03-1702-0456789-00',
       customerName: 'ACME PAYROLL LTD',
       fileReference: 'MARCH2026',
       scheduledDate: '2026-03-23'
@@ -118,7 +118,7 @@ describe('Westpac adapter', () => {
 
   it('renders a UTF-8 buffer', () => {
     const file = createPaymentCsvFile({
-      fromAccount: '01-0123-0456789-00',
+      fromAccount: '03-1702-0456789-00',
       customerName: 'ACME PAYROLL LTD',
       fileReference: 'MARCH2026',
       scheduledDate: '23-03-2026'
@@ -139,7 +139,7 @@ describe('Westpac adapter', () => {
 
   it('normalises an 8-digit scheduledDate input down to Westpac DDMMYY output', () => {
     const file = createPaymentCsvFile({
-      fromAccount: '01-0123-0456789-00',
+      fromAccount: '03-1702-0456789-00',
       scheduledDate: '23032026'
     });
 
@@ -151,7 +151,31 @@ describe('Westpac adapter', () => {
       }).ok
     ).toBe(true);
 
-    expect(file.toString()).toContain('A,000001,03,0123,,,,230326,');
+    expect(file.toString()).toContain('A,000001,03,1702,,,,230326,');
+  });
+
+  it('rejects config accounts that do not belong to Westpac', () => {
+    const wrongWestpacAccount = '01-0123-0456789-00' as string;
+
+    expect(() =>
+      createDirectCreditFile({
+        fromAccount: wrongWestpacAccount,
+        customerName: 'ACME PAYROLL LTD',
+        scheduledDate: '2026-03-23'
+      } as Parameters<typeof createDirectCreditFile>[0])
+    ).toThrowError(/expected bank 03/i);
+  });
+
+  it('rejects direct debit config accounts that do not belong to Westpac', () => {
+    const wrongWestpacAccount = '01-0123-0456789-00' as string;
+
+    expect(() =>
+      createDirectDebitFile({
+        toAccount: wrongWestpacAccount,
+        customerName: 'ACME RECEIPTS LTD',
+        scheduledDate: '2026-03-23'
+      } as Parameters<typeof createDirectDebitFile>[0])
+    ).toThrowError(/expected bank 03/i);
   });
 
   it('parses a Deskbank direct credit CSV file and reproduces it exactly', () => {
